@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gensyn Chain Monitor</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #2a5cbf;
+    color: #ffffff;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 14px;
+    padding: 24px;
+  }
+  .container {
+    max-width: 960px;
+    margin: 0 auto;
+  }
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 10px;
+    font-weight: bold;
+    font-size: 14px;
+    letter-spacing: 1px;
+  }
+  .header-right { font-weight: normal; font-size: 13px; color: #ffffff; }
+
+  /* panel with centered dashed title */
+  .panel { border: 1px solid #ffffff; padding: 8px 10px; margin-bottom: 6px; min-width: 0; }
+  .panel-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: bold;
+    margin-bottom: 6px;
+    white-space: nowrap;
+  }
+  .panel-title::before,
+  .panel-title::after {
+    content: '';
+    flex: 1;
+    border-top: 1px solid #ffffff;
+  }
+
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 6px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr;     gap: 6px; margin-bottom: 6px; }
+
+  table { width: 100%; border-collapse: collapse; }
+  td, th { padding: 1px 0; white-space: nowrap; vertical-align: middle; }
+  th { font-weight: bold; color: #ffffff; font-size: 13px; text-align: left; padding-bottom: 3px; }
+  th.r { text-align: right; }
+  td.r  { text-align: right; }
+  td.note { color: #ffffff; font-size: 12px; padding-left: 10px; }
+
+  .bold  { font-weight: bold; }
+  .green { color: #55cc55; }
+  .rose  { color: #cc5566; }
+  .tan   { color: #ddcc44; }
+  .dim   { color: #ffffff; }
+
+  .bar-wrap { padding-left: 8px; vertical-align: middle; }
+  .bar { height: 9px; background: #1a4a9f; display: inline-block; width: 90px; vertical-align: middle; }
+  .bar-fill { height: 100%; display: block; }
+
+  .sep { border: none; border-top: 1px solid #ffffff; margin: 4px 0; }
+  .footer {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 2px;
+    color: #ffffff;
+    font-size: 12px;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+<div class="header">
+  <span>GENSYN CHAIN MONITOR</span>
+  <span class="header-right" id="ts">—</span>
+</div>
+
+<div class="grid3">
+  <div class="panel" id="p-chain">  <div class="panel-title">Chain</div>      <span class="dim">loading…</span></div>
+  <div class="panel" id="p-rpc">    <div class="panel-title">RPC Health</div> <span class="dim">loading…</span></div>
+  <div class="panel" id="p-tokens"> <div class="panel-title">Tokens</div>     <span class="dim">loading…</span></div>
+</div>
+<div class="grid2">
+  <div class="panel" id="p-delphi"> <div class="panel-title">Delphi Markets</div> <span class="dim">loading…</span></div>
+  <div class="panel" id="p-trades"> <div class="panel-title">Recent Trades</div>  <span class="dim">loading…</span></div>
+</div>
+<div class="grid2">
+  <div class="panel" id="p-pool">   <div class="panel-title">Uniswap V3 Pool</div> <span class="dim">loading…</span></div>
+  <div class="panel" id="p-morpho"> <div class="panel-title">Morpho Vault</div>    <span class="dim">loading…</span></div>
+</div>
+<div class="panel" id="p-blocks">
+  <div class="panel-title">Recent Blocks</div>
+  <span class="dim">loading…</span>
+</div>
+
+<div class="footer">
+  <span>gensyn-mainnet.explorer.alchemy.com · Goldsky/delphi-mainnet · Cloudflare D1</span>
+  <span id="status" class="green">● ONLINE</span>
+</div>
+</div><!-- /container -->
+
+<script>
+const G = '#55cc55', R = '#cc5566', T = '#ddcc44', D = '#ffffff', W = '#ffffff';
+
+function n(v, fb = '—') {
+  if (v == null) return fb;
+  return Number(v).toLocaleString('en');
+}
+function usd(v, dec = 2) {
+  if (v == null) return '—';
+  return '$' + Number(v).toLocaleString('en', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+}
+function bar(pct, color, width = 90) {
+  const w = Math.max(0, Math.min(100, pct)).toFixed(1);
+  return `<td class="bar-wrap"><div class="bar" style="width:${width}px"><div class="bar-fill" style="width:${w}%;background:${color}"></div></div></td>`;
+}
+function row(label, val, color, note = '') {
+  return `<tr>
+    <td style="color:${D}">${label}</td>
+    <td class="r bold" style="color:${color}">${val}</td>
+    ${note ? `<td class="note">${note}</td>` : ''}
+  </tr>`;
+}
+function setPanel(id, html) {
+  const el = document.getElementById(id);
+  const title = el.querySelector('.panel-title').outerHTML;
+  el.innerHTML = title + html;
+}
+
+// ── Chain ─────────────────────────────────────────────────────────────────
+function renderChain(d) {
+  const b = d.blocks?.[0] || {}, s = d.stats || {};
+  const pct = b.gas_used_percentage || 0;
+  let age = '—';
+  if (b.timestamp) {
+    const secs = Math.round(Date.now() / 1000 - new Date(b.timestamp).getTime() / 1000);
+    age = secs + 's ago';
+  }
+  return `<table>
+    ${row('Latest Block',    n(b.height),             W)}
+    ${row('Block Age',       age,                     W)}
+    ${row('Txs in Block',    n(b.transactions_count), W)}
+    ${row('Gas Used',        n(b.gas_used),           W)}
+    ${row('Block Util %',    pct.toFixed(4) + '%',    W)}
+    ${row('Txs Today',       n(s.transactions_today), W)}
+    ${row('Total Txs',       n(s.total_transactions), W)}
+    ${row('Total Addresses', n(s.total_addresses),    W)}
+  </table>`;
+}
+
+// ── RPC Health ────────────────────────────────────────────────────────────
+function renderRpc(d) {
+  const r = d.rpc || {};
+  if (r.error) return `<span style="color:${R}">ERROR: ${r.error}</span>`;
+  const lat = r.latency_ms ?? 0;
+  const latColor  = lat < 200 ? G : lat < 500 ? T : R;
+  const lag       = (d.blocks?.[0]?.height != null && r.block != null) ? d.blocks[0].height - r.block : null;
+  const lagColor  = lag == null ? D : lag <= 2 ? G : lag <= 5 ? T : R;
+  const peerColor = r.peers >= 5 ? G : r.peers >= 1 ? T : R;
+  return `<table>
+    <tr>
+      <td style="color:${D}">Status</td>
+      <td class="r bold" style="color:${r.syncing ? T : G}">${r.syncing ? 'SYNCING' : 'HEALTHY'}</td>
+    </tr>
+    <tr>
+      <td style="color:${D}">Latency</td>
+      <td class="r bold" style="color:${W}">${lat} ms</td>
+      ${bar(lat / 10, latColor, 60)}
+    </tr>
+    ${row('RPC Block',  n(r.block),                          W)}
+    ${row('Block Lag',  lag != null ? lag + ' blks' : '—',  lagColor)}
+    ${row('Peers',      r.peers != null ? r.peers : '—',    peerColor)}
+    ${row('Gas Price',  r.gas_price != null ? (r.gas_price / 1e9).toFixed(4) + ' gwei' : '—', W)}
+  </table>`;
+}
+
+// ── Tokens ────────────────────────────────────────────────────────────────
+function renderTokens(d) {
+  const r = d.rpc || {};
+  return `<table>
+    <tr><th>Token</th><th class="r">Value</th></tr>
+    ${row('ETH Supply',    d.l1_eth != null ? d.l1_eth.toFixed(4) + ' ETH' : '—',            W)}
+    ${row('USDC.e Supply', usd(r.usdc_e),                                                      W)}
+    ${row('AI Supply',     r.ai_supply != null ? (r.ai_supply / 1e9).toFixed(2) + 'B' : '—', W)}
+    <tr><td colspan="2"><hr class="sep"></td></tr>
+    <tr><td class="bold" style="color:${W}">Buy Burn Vault</td><td></td></tr>
+    ${row('USDC.e Funding', usd(r.bbv_usdc), W)}
+  </table>`;
+}
+
+// ── Delphi Markets ────────────────────────────────────────────────────────
+function renderDelphi(d) {
+  const m = d.delphi || {};
+  const bv = m.buy_vol || 0, sv = m.sell_vol || 0, rv = m.redm_vol || 0;
+  const total = (bv + sv) || 1;
+  const $m = v => usd(v / 1e6);
+  return `<table>
+    <tr><th>Activity</th><th class="r">USDC</th><th class="r" style="padding-left:8px">N</th><th></th></tr>
+    <tr>
+      <td style="color:${G}">Buys</td>
+      <td class="r bold" style="color:${W}">${$m(bv)}</td>
+      <td class="r" style="color:${W};padding-left:8px">${m.buy_n || 0}</td>
+      ${bar(bv / total * 100, G)}
+    </tr>
+    <tr>
+      <td style="color:${R}">Sells</td>
+      <td class="r bold" style="color:${W}">${$m(sv)}</td>
+      <td class="r" style="color:${W};padding-left:8px">${m.sell_n || 0}</td>
+      ${bar(sv / total * 100, R)}
+    </tr>
+    <tr>
+      <td style="color:${T}">Redemptions</td>
+      <td class="r bold" style="color:${W}">${$m(rv)}</td>
+      <td class="r" style="color:${W};padding-left:8px">${m.redm_n || 0}</td>
+      ${bar(rv / total * 100, T)}
+    </tr>
+    <tr><td colspan="4"><hr class="sep"></td></tr>
+    ${row('Total Vol',   $m(bv + sv),       W)}
+    ${row('Traders',     m.traders || 0,    W)}
+    ${row('Resolutions', m.resolutions || 0, W)}
+  </table>`;
+}
+
+// ── Recent Trades ─────────────────────────────────────────────────────────
+function renderTrades(d) {
+  const trades = d.delphi?.recent || [];
+  if (!trades.length) return '<span class="dim">No trades yet</span>';
+  const rows = trades.map(t => {
+    const c    = t.side === 'BUY' ? G : R;
+    const dt   = new Date(t.timestamp_ * 1000).toLocaleString('en', {
+      month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+    });
+    const addr = t.addr.slice(0, 6) + '…' + t.addr.slice(-4);
+    return `<tr>
+      <td class="bold" style="color:${c}">${t.side}</td>
+      <td style="color:${W};padding-left:8px">${dt}</td>
+      <td style="color:${W};padding-left:8px">${addr}</td>
+      <td class="r bold" style="color:${W}">${usd(t.usdc / 1e6)}</td>
+    </tr>`;
+  }).join('');
+  return `<table>
+    <tr><th>Side</th><th style="padding-left:8px">Time</th><th style="padding-left:8px">Wallet</th><th class="r">USDC</th></tr>
+    ${rows}
+  </table>`;
+}
+
+// ── Uniswap V3 Pool ───────────────────────────────────────────────────────
+function renderPool(d) {
+  const r = d.rpc || {};
+  const active = r.pool_liq != null && r.pool_liq > 0;
+  const sc = active ? G : D;
+  return `<table>
+    <tr><th>Metric</th><th class="r">Value</th></tr>
+    <tr>
+      <td style="color:${D}">Status</td>
+      <td class="r bold" style="color:${sc}">${active ? 'ACTIVE' : 'INACTIVE'}</td>
+    </tr>
+    ${row('AI Price',  r.pool_price != null ? '$' + r.pool_price.toFixed(6) : '—', W)}
+    ${row('Liquidity', n(r.pool_liq),                                               W)}
+    ${row('AI Supply', r.ai_supply != null ? (r.ai_supply / 1e9).toFixed(3) + 'B' : '—', W)}
+  </table>`;
+}
+
+// ── Morpho Vault ──────────────────────────────────────────────────────────
+function renderMorpho(d) {
+  const r = d.rpc || {};
+  const nav = (r.morpho_tvl != null && r.morpho_sup != null && r.morpho_sup > 0)
+    ? r.morpho_tvl / r.morpho_sup : null;
+  return `<table>
+    <tr><th>Metric</th><th class="r">Value</th></tr>
+    ${row('Vault',      'gpUSDC',          W)}
+    ${row('TVL',        usd(r.morpho_tvl), W)}
+    ${nav != null ? row('NAV / share', '$' + nav.toFixed(4), W) : ''}
+  </table>`;
+}
+
+// ── Recent Blocks ─────────────────────────────────────────────────────────
+function renderBlocks(d) {
+  const blocks = d.blocks || [];
+  if (!blocks.length) return '<span class="dim">loading…</span>';
+  const rows = blocks.slice(0, 8).map(b => {
+    const pct = b.gas_used_percentage || 0;
+    return `<tr>
+      <td class="bold" style="color:${W}">${b.height || '—'}</td>
+      <td class="r" style="color:${W};padding-left:12px">${b.transactions_count || 0}</td>
+      <td class="r" style="color:${W};padding-left:12px">${n(b.gas_used)}</td>
+      <td class="r" style="color:${T};padding-left:12px">${pct.toFixed(3)}%</td>
+      <td class="r" style="color:${D};padding-left:12px">${n(b.size)}</td>
+      ${bar(pct * 100, G, 100)}
+    </tr>`;
+  }).join('');
+  return `<table>
+    <tr>
+      <th>Block</th>
+      <th class="r" style="padding-left:12px">Txs</th>
+      <th class="r" style="padding-left:12px">Gas Used</th>
+      <th class="r" style="padding-left:12px">Util %</th>
+      <th class="r" style="padding-left:12px">Size</th>
+      <th></th>
+    </tr>
+    ${rows}
+  </table>`;
+}
+
+// ── refresh loop ──────────────────────────────────────────────────────────
+async function refresh() {
+  try {
+    const r = await fetch('/api/data?t=' + Date.now());
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+
+    document.getElementById('ts').textContent =
+      'Last updated: ' + new Date().toUTCString().replace(' GMT', ' UTC');
+    document.getElementById('status').textContent = '● ONLINE';
+    document.getElementById('status').style.color = G;
+
+    setPanel('p-chain',   renderChain(d));
+    setPanel('p-rpc',     renderRpc(d));
+    setPanel('p-tokens',  renderTokens(d));
+    setPanel('p-delphi',  renderDelphi(d));
+    setPanel('p-trades',  renderTrades(d));
+    setPanel('p-pool',    renderPool(d));
+    setPanel('p-morpho',  renderMorpho(d));
+    setPanel('p-blocks',  renderBlocks(d));
+  } catch (e) {
+    document.getElementById('status').textContent = '● ' + e.message;
+    document.getElementById('status').style.color = R;
+  }
+}
+
+refresh();
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>

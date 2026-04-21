@@ -1,0 +1,18 @@
+name            = "chain-monitor"
+main            = "src/index.js"
+compatibility_date = "2024-09-23"
+
+[triggers]
+crons = ["*/2 * * * *"]   # sync Delphi data every 2 minutes
+
+[[d1_databases]]
+binding      = "DB"
+database_name = "chain-monitor"
+database_id  = "71fcd536-d790-495c-94d3-c6665261e3d5"   # run: wrangler d1 create chain-monitor
+
+[assets]
+directory = "./public"
+
+# Secrets (set via: wrangler secret put <NAME>)
+# RPC_URL    — private Gensyn Alchemy endpoint  (falls back to public if unset)
+# L1_RPC_URL — Ethereum mainnet Alchemy endpoint (needed for ETH supply)
