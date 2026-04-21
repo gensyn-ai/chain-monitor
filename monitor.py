@@ -14,8 +14,9 @@ from rich.text import Text
 from rich.panel import Panel
 from rich import box
 
-BLOCKS_API = "https://gensyn-mainnet.explorer.alchemy.com/api/v2/main-page/blocks"
-STATS_API  = "https://gensyn-mainnet.explorer.alchemy.com/api/v2/stats"
+EXPLORER   = "https://gensyn-mainnet.explorer.alchemy.com"
+BLOCKS_API = f"{EXPLORER}/api/v2/main-page/blocks"
+STATS_API  = f"{EXPLORER}/api/v2/stats"
 RPC_URL    = os.environ.get("GENSYN_RPC_URL",  "https://gensyn-mainnet.g.alchemy.com/public")
 L1_RPC_URL = os.environ.get("L1_RPC_URL",       "")  # set to your Ethereum mainnet RPC
 USDC_E       = "0x5b32c997211621d55a89Cc5abAF1cC21F3A6ddF5"
@@ -34,7 +35,12 @@ TAN = "#a8801a"   # dark amber (neutral / warn)
 DIM = "#888888"   # medium gray (de-emphasized)
 WHT = "default"   # primary text, inherits terminal FG (dark-on-light / light-on-dark)
 BRD = "#808080"   # panel border, mid-gray
+LNK = "#3d7cb3"   # hyperlink, dusty blue (≈4.5:1 contrast on both bg)
 HDR = "bold default underline"   # column headings
+
+# suffix glyph appended after linked text so the click affordance is visible even
+# when a terminal can't render OSC 8 (tmux without passthrough, screen, piped output)
+LINK_GLYPH = " ↗"
 
 # max inner width of the dashboard (matches the 960px web container at ~8px/col)
 MAX_WIDTH = 120
@@ -145,6 +151,15 @@ def fmt(val, fallback="—"):
         return str(val)
 
 
+def linkify(label: str, url: str, *, bold: bool = False) -> Text:
+    """Render ``label`` as a clickable OSC 8 hyperlink in the link color, suffixed
+    with a small ↗ glyph so the click affordance is visible without mouse hover."""
+    style = f"{LNK} link {url}"
+    if bold:
+        style = "bold " + style
+    return Text(label + LINK_GLYPH, style=style)
+
+
 def bar(filled_pct, width=28, color=G):
     n = max(0, min(width, round(filled_pct / 100 * width)))
     return Text("█" * n + " " * (width - n), style=f"{color}")
@@ -195,18 +210,22 @@ def make_chain_table(latest, stats):
     t.add_column(style=WHT, no_wrap=True)
     t.add_column(style=WHT, justify="right", no_wrap=True)
 
+    # "Latest Block" value is a clickable link to its explorer page.
+    height = latest.get("height")
     rows = [
-        ("Latest Block",    fmt(latest.get("height"))),
-        ("Block Age",       blk_age),
-        ("Txs in Block",    fmt(latest.get("transactions_count"))),
-        ("Gas Used",        fmt(latest.get("gas_used"))),
-        ("Block Util %",    f"{gas_pct:.4f}%"),
-        ("Txs Today",       fmt(stats.get("transactions_today"))),
-        ("Total Txs",       fmt(stats.get("total_transactions"))),
-        ("Total Addresses", fmt(stats.get("total_addresses"))),
+        ("Latest Block",    fmt(height),
+            linkify(fmt(height), f"{EXPLORER}/block/{height}", bold=True) if height else None),
+        ("Block Age",       blk_age,                                 None),
+        ("Txs in Block",    fmt(latest.get("transactions_count")),    None),
+        ("Gas Used",        fmt(latest.get("gas_used")),              None),
+        ("Block Util %",    f"{gas_pct:.4f}%",                        None),
+        ("Txs Today",       fmt(stats.get("transactions_today")),     None),
+        ("Total Txs",       fmt(stats.get("total_transactions")),     None),
+        ("Total Addresses", fmt(stats.get("total_addresses")),        None),
     ]
-    for label, val in rows:
-        t.add_row(Text(label, style=WHT), Text(val, style=f"bold {WHT}"))
+    for label, val, val_text in rows:
+        t.add_row(Text(label, style=WHT),
+                  val_text if val_text is not None else Text(val, style=f"bold {WHT}"))
     return Panel(t, title=f"[bold italic {WHT}]Chain[/]", border_style=BRD,
                  padding=(0, 1), height=ROW1_HEIGHT)
 
@@ -242,8 +261,10 @@ def make_rpc_table(rpc, blocks):
     t.add_row(Text("Latency",   style=WHT),
               Text(f"{lat:.1f} ms" if lat else "—", style=f"bold {WHT}"),
               bar(lat_pct, width=6, color=lat_color))
+    rpc_block_cell = (linkify(fmt(rpc_block), f"{EXPLORER}/block/{rpc_block}", bold=True)
+                      if rpc_block else Text(fmt(rpc_block), style=f"bold {WHT}"))
     t.add_row(Text("RPC Block", style=WHT),
-              Text(fmt(rpc_block), style=f"bold {WHT}"),
+              rpc_block_cell,
               Text(""))
     t.add_row(Text("Block Lag", style=WHT),
               Text(f"{lag} blks" if lag is not None else "—", style=f"bold {lag_color}"),
@@ -312,9 +333,11 @@ def make_trades_table(ds):
     for side, ts, addr, market, usdc in (ds.get("recent") or []):
         color = G if side == "BUY" else R
         t_str = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%m/%d %H:%M:%S")
+        # shortened wallet → clickable link to the full address page
+        addr_short = addr[:6] + "…" + addr[-4:]
         t.add_row(Text(side,  style=f"bold {color}"),
                   Text(t_str, style=DIM),
-                  Text(addr[:6] + "…" + addr[-4:], style=DIM),
+                  linkify(addr_short, f"{EXPLORER}/address/{addr}"),
                   Text(f"${usdc/1e6:,.2f}", style=f"bold {WHT}"))
     return Panel(t, title=f"[bold italic {WHT}]Recent Trades[/]", border_style=BRD,
                  padding=(0, 1), height=ROW2_HEIGHT)
@@ -415,13 +438,17 @@ def make_blocks_table(blocks):
     bar_w = 52
 
     for b in blocks[:8]:
-        pct = b.get("gas_used_percentage") or 0
+        pct    = b.get("gas_used_percentage") or 0
+        height = b.get("height")
         # Gensyn is a low-traffic L2 — typical blocks are <0.01% full and carry no signal.
         # Dim them so the rare busy block stands out.
         if   pct >= 10:   util_color = R     # congestion
         elif pct >= 0.1:  util_color = TAN   # elevated / notable
         else:             util_color = DIM   # normal idle block
-        t.add_row(Text(str(b.get("height", "—")),             style=f"bold {WHT}"),
+        # block height → clickable link to its explorer page
+        height_cell = (linkify(str(height), f"{EXPLORER}/block/{height}", bold=True)
+                       if height else Text("—", style=f"bold {WHT}"))
+        t.add_row(height_cell,
                   Text(str(b.get("transactions_count", "—")), style=WHT),
                   Text(fmt(b.get("gas_used")),                style=WHT),
                   Text(f"{pct:.3f}%",                         style=util_color),
@@ -487,7 +514,11 @@ def build():
     foot = Table.grid(expand=True)
     foot.add_column()
     foot.add_column(justify="right")
-    foot.add_row(Text("gensyn-mainnet.explorer.alchemy.com  ·  Goldsky/delphi-mainnet", style=DIM),
+    # left side: explorer URL is a real hyperlink; the rest is plain descriptor text
+    footer_left = Text()
+    footer_left.append_text(linkify("gensyn-mainnet.explorer.alchemy.com", EXPLORER))
+    footer_left.append("  ·  Goldsky/delphi-mainnet", style=DIM)
+    foot.add_row(footer_left,
                  Text(online, style=f"bold {G}" if not error else f"bold {R}"))
     root.add_row(foot)
 
@@ -511,9 +542,13 @@ def main():
     t.start()
     time.sleep(0.8)
 
-    with Live(build(), refresh_per_second=2, screen=True) as live:
+    # Redraw at 1 Hz — matches the cadence of the only per-second-ticking value
+    # on screen (Block Age). Data (blocks + RPC) refreshes every 2s in fetch_loop,
+    # so half the redraws paint unchanged data, which is fine and far quieter than
+    # 2 Hz (which caused the cursor to race the repaint when clicking links).
+    with Live(build(), refresh_per_second=1, screen=True) as live:
         while True:
-            time.sleep(0.5)
+            time.sleep(1.0)
             live.update(build())
 
 
