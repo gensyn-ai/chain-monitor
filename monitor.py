@@ -27,12 +27,21 @@ MORPHO_VAULT = "0x1b6C76fF584FBee80e4BBd7a4eB060c6C8Dd3B9F"  # Gensyn Prime USDC
 DB_PATH      = Path(__file__).parent / "delphi.db"
 
 # ── palette ──────────────────────────────────────────────────────────────
-G   = "#87af87"   # sage green  (buys, positive)
-R   = "#af5f75"   # dusty rose  (sells, negative)
-TAN = "#d7af5f"   # tan         (neutral / totals)
-DIM = "#5f5f5f"   # dim gray
-WHT = "#d0d0d0"   # off-white values
-HDR = "bold #d0d0d0 underline"
+# Palette tuned to look reasonable on both light and dark terminals.
+G   = "#5a8a5a"   # forest sage (buys, positive)
+R   = "#af5f75"   # dusty rose (sells, negative)
+TAN = "#a8801a"   # dark amber (neutral / warn)
+DIM = "#888888"   # medium gray (de-emphasized)
+WHT = "default"   # primary text, inherits terminal FG (dark-on-light / light-on-dark)
+BRD = "#808080"   # panel border, mid-gray
+HDR = "bold default underline"   # column headings
+
+# max inner width of the dashboard (matches the 960px web container at ~8px/col)
+MAX_WIDTH = 120
+# fixed heights so sibling panels in a row align flush with the row below
+ROW1_HEIGHT = 10  # Chain / RPC / Tokens
+ROW2_HEIGHT = 11  # Delphi / Recent Trades
+ROW3_HEIGHT = 7   # Uniswap Pool / Morpho Vault
 
 console = Console()
 state   = {"blocks": [], "stats": {}, "error": None, "rpc": {}, "l1_eth": None}
@@ -182,34 +191,36 @@ def make_chain_table(latest, stats):
         except Exception:
             pass
 
-    t = Table(box=None, show_header=False, padding=(0, 2))
-    t.add_column(style=WHT, min_width=18)
-    t.add_column(style=WHT, justify="right", min_width=12)
+    t = Table(box=None, show_header=False, padding=(0, 1), expand=True)
+    t.add_column(style=WHT, no_wrap=True)
+    t.add_column(style=WHT, justify="right", no_wrap=True)
 
     rows = [
-        ("Latest Block",    fmt(latest.get("height")),               G),
-        ("Block Age",       blk_age,                                 DIM),
-        ("Txs in Block",    fmt(latest.get("transactions_count")),    TAN),
-        ("Gas Used",        fmt(latest.get("gas_used")),              G),
-        ("Block Util %",    f"{gas_pct:.4f}%",                        G),
-        ("Txs Today",       fmt(stats.get("transactions_today")),     TAN),
-        ("Total Txs",       fmt(stats.get("total_transactions")),     G),
-        ("Total Addresses", fmt(stats.get("total_addresses")),        G),
+        ("Latest Block",    fmt(latest.get("height"))),
+        ("Block Age",       blk_age),
+        ("Txs in Block",    fmt(latest.get("transactions_count"))),
+        ("Gas Used",        fmt(latest.get("gas_used"))),
+        ("Block Util %",    f"{gas_pct:.4f}%"),
+        ("Txs Today",       fmt(stats.get("transactions_today"))),
+        ("Total Txs",       fmt(stats.get("total_transactions"))),
+        ("Total Addresses", fmt(stats.get("total_addresses"))),
     ]
-    for label, val, color in rows:
-        t.add_row(Text(label, style=color), Text(val, style=f"bold {WHT}"))
-    return Panel(t, title="[bold #d0d0d0]Chain[/]", border_style="#3a3a3a", padding=(0, 1))
+    for label, val in rows:
+        t.add_row(Text(label, style=WHT), Text(val, style=f"bold {WHT}"))
+    return Panel(t, title=f"[bold italic {WHT}]Chain[/]", border_style=BRD,
+                 padding=(0, 1), height=ROW1_HEIGHT)
 
 
 def make_rpc_table(rpc, blocks):
-    t = Table(box=None, show_header=False, padding=(0, 2))
-    t.add_column(style=WHT, min_width=14)
-    t.add_column(style=WHT, justify="right", min_width=16)
-    t.add_column(min_width=16)
+    t = Table(box=None, show_header=False, padding=(0, 1), expand=True)
+    t.add_column(style=WHT, no_wrap=True)
+    t.add_column(style=WHT, justify="right", no_wrap=True)
+    t.add_column(no_wrap=True)
 
     if rpc.get("error"):
         t.add_row(Text("Status", style=R), Text("ERROR", style=f"bold {R}"), Text(""))
-        return Panel(t, title="[bold #d0d0d0]RPC Health[/]", border_style="#3a3a3a", padding=(0, 1))
+        return Panel(t, title=f"[bold italic {WHT}]RPC Health[/]", border_style=BRD,
+                     padding=(0, 1), height=ROW1_HEIGHT)
 
     rpc_block  = rpc.get("block")
     expl_block = blocks[0].get("height") if blocks else None
@@ -224,32 +235,35 @@ def make_rpc_table(rpc, blocks):
     peer_color = G if peers and peers >= 5 else (TAN if peers and peers >= 1 else R)
     lat_pct    = min((lat or 0) / 1000 * 100, 100)
 
-    t.add_row(Text("Status",    style=G),
-              Text("HEALTHY" if not syncing else "SYNCING", style=f"bold {G if not syncing else TAN}"),
+    t.add_row(Text("Status",    style=WHT),
+              Text("HEALTHY" if not syncing else "SYNCING",
+                   style=f"bold {G if not syncing else TAN}"),
               Text(""))
-    t.add_row(Text("Latency",   style=lat_color),
-              Text(f"{lat} ms" if lat else "—", style=f"bold {WHT}"),
-              bar(lat_pct, width=14, color=lat_color))
+    t.add_row(Text("Latency",   style=WHT),
+              Text(f"{lat:.1f} ms" if lat else "—", style=f"bold {WHT}"),
+              bar(lat_pct, width=6, color=lat_color))
     t.add_row(Text("RPC Block", style=WHT),
               Text(fmt(rpc_block), style=f"bold {WHT}"),
               Text(""))
-    t.add_row(Text("Block Lag", style=lag_color),
-              Text(f"{lag} blks" if lag is not None else "—", style=f"bold {WHT}"),
+    t.add_row(Text("Block Lag", style=WHT),
+              Text(f"{lag} blks" if lag is not None else "—", style=f"bold {lag_color}"),
               Text(""))
-    t.add_row(Text("Peers",     style=peer_color),
-              Text(str(peers) if peers is not None else "—", style=f"bold {WHT}"),
+    t.add_row(Text("Peers",     style=WHT),
+              Text(str(peers) if peers is not None else "—", style=f"bold {peer_color}"),
               Text(""))
     t.add_row(Text("Gas Price", style=WHT),
               Text(f"{gas_wei/1e9:.4f} gwei" if gas_wei else "—", style=f"bold {WHT}"),
               Text(""))
-    return Panel(t, title="[bold #d0d0d0]RPC Health[/]", border_style="#3a3a3a", padding=(0, 1))
+    return Panel(t, title=f"[bold italic {WHT}]RPC Health[/]", border_style=BRD,
+                 padding=(0, 1), height=ROW1_HEIGHT)
 
 
 def make_delphi_table(ds):
     bv        = ds.get("buy_vol", 0)
     sv        = ds.get("sell_vol", 0)
     rv        = ds.get("redm_vol", 0)
-    total_vol = (bv + sv) or 1
+    # bars show each category's share of total activity — all three sum to 100%
+    total_vol = (bv + sv + rv) or 1
 
     t = Table(box=None, show_header=True, header_style=HDR, padding=(0, 2))
     t.add_column("Activity",  style=WHT, min_width=14)
@@ -269,7 +283,11 @@ def make_delphi_table(ds):
               Text(f"${rv/1e6:,.2f}", style=f"bold {WHT}"),
               Text(str(ds.get("redm_n", 0)), style=WHT),
               bar(rv / total_vol * 100, width=14, color=TAN))
-    t.add_row(Text(""),            Text(""),  Text(""), Text(""))
+    # horizontal rule separating activity rows from totals — overflow="crop" avoids the "…" ellipsis
+    t.add_row(Text("─" * 80, style=BRD, overflow="crop"),
+              Text("─" * 80, style=BRD, overflow="crop"),
+              Text("─" * 80, style=BRD, overflow="crop"),
+              Text("─" * 80, style=BRD, overflow="crop"))
     t.add_row(Text("Total Vol",    style=WHT),
               Text(f"${(bv+sv)/1e6:,.2f}", style=f"bold {WHT}"),
               Text(str(ds.get("buy_n",0)+ds.get("sell_n",0)), style=WHT),
@@ -280,7 +298,8 @@ def make_delphi_table(ds):
     t.add_row(Text("Resolutions",  style=WHT),
               Text(str(ds.get("resolutions", 0)), style=f"bold {WHT}"),
               Text(""), Text(""))
-    return Panel(t, title="[bold #d0d0d0]Delphi Markets[/]", border_style="#3a3a3a", padding=(0, 1))
+    return Panel(t, title=f"[bold italic {WHT}]Delphi Markets[/]", border_style=BRD,
+                 padding=(0, 1), height=ROW2_HEIGHT)
 
 
 def make_trades_table(ds):
@@ -297,7 +316,8 @@ def make_trades_table(ds):
                   Text(t_str, style=DIM),
                   Text(addr[:6] + "…" + addr[-4:], style=DIM),
                   Text(f"${usdc/1e6:,.2f}", style=f"bold {WHT}"))
-    return Panel(t, title="[bold #d0d0d0]Recent Trades[/]", border_style="#3a3a3a", padding=(0, 1))
+    return Panel(t, title=f"[bold italic {WHT}]Recent Trades[/]", border_style=BRD,
+                 padding=(0, 1), height=ROW2_HEIGHT)
 
 
 def make_tokens_panel(rpc):
@@ -306,29 +326,26 @@ def make_tokens_panel(rpc):
     ai_supply = rpc.get("ai_supply")
     l1_eth   = state["l1_eth"]
 
-    t = Table(box=None, show_header=True, header_style=HDR, padding=(0, 2))
-    t.add_column("Token",   style=WHT, min_width=20)
-    t.add_column("Value",   style=WHT, justify="right", min_width=16)
-    t.add_column("Note",    style=DIM, min_width=20)
+    t = Table(box=None, show_header=True, header_style=HDR, padding=(0, 1), expand=True)
+    t.add_column("Token", style=WHT, no_wrap=True)
+    t.add_column("Value", style=WHT, justify="right", no_wrap=True)
 
-    t.add_row(Text("ETH Supply",     style=G),
-              Text(f"{l1_eth:.4f} ETH" if l1_eth is not None else "—", style=f"bold {WHT}"),
-              Text("via L1 portal"))
-    t.add_row(Text("USDC.e Supply",  style=TAN),
-              Text(f"${usdc_e:,.2f}" if usdc_e is not None else "—", style=f"bold {WHT}"),
-              Text("total on-chain"))
-    t.add_row(Text("AI Supply",      style=G),
-              Text(f"{ai_supply:,.0f}" if ai_supply is not None else "—", style=f"bold {WHT}"),
-              Text("Gensyn AI token"))
-    t.add_row(Text(""), Text(""), Text(""))
-    t.add_row(Text("Buy Burn Vault", style=DIM),
-              Text(""),
-              Text("0x2CBE…0243", style=DIM))
-    t.add_row(Text("USDC.e Supply",  style=TAN),
-              Text(f"${bbv_usdc:,.2f}" if bbv_usdc is not None else "—", style=f"bold {WHT}"),
-              Text("in vault"))
+    t.add_row(Text("ETH Supply",     style=WHT),
+              Text(f"{l1_eth:,.2f} ETH" if l1_eth is not None else "—", style=f"bold {WHT}"))
+    t.add_row(Text("USDC.e Supply",  style=WHT),
+              Text(f"${usdc_e:,.2f}" if usdc_e is not None else "—", style=f"bold {WHT}"))
+    t.add_row(Text("AI Supply",      style=WHT),
+              Text(f"{ai_supply/1e9:.2f}B" if ai_supply is not None else "—", style=f"bold {WHT}"))
+    # horizontal rule separating top/bottom sections — overflow="crop" avoids the "…" ellipsis
+    t.add_row(Text("─" * 80, style=BRD, overflow="crop"),
+              Text("─" * 80, style=BRD, overflow="crop"))
+    # section header — emphasized, not semantic
+    t.add_row(Text("Buy Burn Vault", style=f"bold {WHT}"), Text(""))
+    t.add_row(Text("USDC.e Funding", style=WHT),
+              Text(f"${bbv_usdc:,.2f}" if bbv_usdc is not None else "—", style=f"bold {WHT}"))
 
-    return Panel(t, title="[bold #d0d0d0]Tokens[/]", border_style="#3a3a3a", padding=(0, 1))
+    return Panel(t, title=f"[bold italic {WHT}]Tokens[/]", border_style=BRD,
+                 padding=(0, 1), height=ROW1_HEIGHT)
 
 
 def make_pool_panel(rpc):
@@ -342,70 +359,75 @@ def make_pool_panel(rpc):
     else:
         price = None
 
-    t = Table(box=None, show_header=True, header_style=HDR, padding=(0, 2))
-    t.add_column("Metric",    style=WHT, min_width=18)
-    t.add_column("Value",     style=WHT, justify="right", min_width=16)
-    t.add_column("Note",      style=DIM, min_width=14)
+    t = Table(box=None, show_header=True, header_style=HDR, padding=(0, 1), expand=True)
+    t.add_column("Metric", style=WHT, no_wrap=True)
+    t.add_column("Value", style=WHT, justify="right", no_wrap=True)
 
     status_color = G if active else DIM
-    t.add_row(Text("Status",      style=status_color),
-              Text("ACTIVE" if active else "INACTIVE", style=f"bold {status_color}"),
-              Text("AI/USDC.e 0.3%"))
-    t.add_row(Text("AI Price",    style=TAN),
-              Text(f"${price:.6f}" if price else "—", style=f"bold {WHT}"),
-              Text("per AI token"))
-    t.add_row(Text("Liquidity",   style=WHT),
-              Text(fmt(liq) if liq is not None else "—", style=f"bold {WHT}"),
-              Text("in-range LP"))
-    t.add_row(Text("AI Supply",   style=G),
-              Text(f"{ai_sup/1e9:.3f}B" if ai_sup is not None else "—", style=f"bold {WHT}"),
-              Text("total circulating"))
+    t.add_row(Text("Status",    style=WHT),
+              Text("ACTIVE" if active else "INACTIVE", style=f"bold {status_color}"))
+    t.add_row(Text("AI Price",  style=WHT),
+              Text(f"${price:.6f}" if price else "—", style=f"bold {WHT}"))
+    t.add_row(Text("Liquidity", style=WHT),
+              Text(fmt(liq) if liq is not None else "—", style=f"bold {WHT}"))
+    t.add_row(Text("AI Supply", style=WHT),
+              Text(f"{ai_sup/1e9:.3f}B" if ai_sup is not None else "—", style=f"bold {WHT}"))
 
-    return Panel(t, title="[bold #d0d0d0]Uniswap V3 Pool[/]", border_style="#3a3a3a", padding=(0, 1))
+    return Panel(t, title=f"[bold italic {WHT}]Uniswap V3 Pool[/]", border_style=BRD,
+                 padding=(0, 1), height=ROW3_HEIGHT)
 
 
 def make_morpho_panel(rpc):
     tvl = rpc.get("morpho_tvl")
     sup = rpc.get("morpho_sup")
 
-    t = Table(box=None, show_header=True, header_style=HDR, padding=(0, 2))
-    t.add_column("Metric",    style=WHT, min_width=18)
-    t.add_column("Value",     style=WHT, justify="right", min_width=16)
-    t.add_column("Note",      style=DIM, min_width=14)
+    t = Table(box=None, show_header=True, header_style=HDR, padding=(0, 1), expand=True)
+    t.add_column("Metric", style=WHT, no_wrap=True)
+    t.add_column("Value", style=WHT, justify="right", no_wrap=True)
 
-    t.add_row(Text("Vault",       style=DIM),
-              Text("gpUSDC",      style=f"bold {WHT}"),
-              Text("Gensyn Prime"))
-    t.add_row(Text("TVL",         style=TAN),
-              Text(f"${tvl:,.2f}" if tvl is not None else "—", style=f"bold {WHT}"),
-              Text("USDC.e assets"))
+    t.add_row(Text("Vault", style=WHT),
+              Text("gpUSDC", style=f"bold {WHT}"))
+    t.add_row(Text("TVL",   style=WHT),
+              Text(f"${tvl:,.2f}" if tvl is not None else "—", style=f"bold {WHT}"))
     if tvl is not None and sup is not None and sup > 0:
         nav = tvl / sup
-        t.add_row(Text("NAV / share",  style=WHT),
-                  Text(f"${nav:.4f}", style=f"bold {WHT}"),
-                  Text("USDC.e/gpUSDC"))
+        t.add_row(Text("NAV / share", style=WHT),
+                  Text(f"${nav:.4f}", style=f"bold {WHT}"))
 
-    return Panel(t, title="[bold #d0d0d0]Morpho Vault[/]", border_style="#3a3a3a", padding=(0, 1))
+    return Panel(t, title=f"[bold italic {WHT}]Morpho Vault[/]", border_style=BRD,
+                 padding=(0, 1), height=ROW3_HEIGHT)
 
 
 def make_blocks_table(blocks):
-    t = Table(box=None, show_header=True, header_style=HDR, padding=(0, 2))
-    t.add_column("Block",    justify="right", min_width=10)
-    t.add_column("Txs",      justify="right", min_width=4)
-    t.add_column("Gas Used", justify="right", min_width=10)
-    t.add_column("Util %",   justify="right", min_width=7)
-    t.add_column("Size",     justify="right", min_width=7)
-    t.add_column("",         min_width=20)
+    t = Table(box=None, show_header=True, header_style=HDR, padding=(0, 2), expand=True)
+    t.add_column("Block",    justify="left",  no_wrap=True)
+    t.add_column("Txs",      justify="right", no_wrap=True)
+    t.add_column("Gas Used", justify="right", no_wrap=True)
+    t.add_column("Util %",   justify="right", no_wrap=True)
+    t.add_column("Size",     justify="right", no_wrap=True)
+    # the bar column is flexible and absorbs all the remaining panel width
+    t.add_column("",         ratio=1, no_wrap=True)
+
+    # bar width sized to fill the flex column at MAX_WIDTH=120:
+    #   panel_inner = 120 - 4 (border+padding) = 116
+    #   fixed cols  ≈ 10+4+10+7+7 = 38, col-padding (0,2)*5 gaps ≈ 20
+    #   remaining   ≈ 58  →  bar width ~52 to leave a little breathing room
+    bar_w = 52
 
     for b in blocks[:8]:
         pct = b.get("gas_used_percentage") or 0
-        t.add_row(Text(str(b.get("height", "—")),             style=f"bold {G}"),
+        # Gensyn is a low-traffic L2 — typical blocks are <0.01% full and carry no signal.
+        # Dim them so the rare busy block stands out.
+        if   pct >= 10:   util_color = R     # congestion
+        elif pct >= 0.1:  util_color = TAN   # elevated / notable
+        else:             util_color = DIM   # normal idle block
+        t.add_row(Text(str(b.get("height", "—")),             style=f"bold {WHT}"),
                   Text(str(b.get("transactions_count", "—")), style=WHT),
                   Text(fmt(b.get("gas_used")),                style=WHT),
-                  Text(f"{pct:.3f}%",                         style=TAN),
+                  Text(f"{pct:.3f}%",                         style=util_color),
                   Text(fmt(b.get("size")),                    style=DIM),
-                  bar(pct * 100, width=18, color=G))
-    return Panel(t, title="[bold #d0d0d0]Recent Blocks[/]", border_style="#3a3a3a", padding=(0, 1))
+                  bar(pct * 100, width=bar_w, color=G))
+    return Panel(t, title=f"[bold italic {WHT}]Recent Blocks[/]", border_style=BRD, padding=(0, 1))
 
 
 # ── layout ────────────────────────────────────────────────────────────────
@@ -469,7 +491,17 @@ def build():
                  Text(online, style=f"bold {G}" if not error else f"bold {R}"))
     root.add_row(foot)
 
-    return root
+    # ── center + clamp to MAX_WIDTH ──
+    console_w = console.size.width
+    if console_w <= MAX_WIDTH:
+        return root
+    pad = (console_w - MAX_WIDTH) // 2
+    wrapper = Table.grid()
+    wrapper.add_column(width=pad)
+    wrapper.add_column(width=MAX_WIDTH)
+    wrapper.add_column()
+    wrapper.add_row("", root, "")
+    return wrapper
 
 
 # ── main ──────────────────────────────────────────────────────────────────
