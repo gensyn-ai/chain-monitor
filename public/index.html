@@ -92,9 +92,10 @@
   <div class="panel" id="p-delphi"> <div class="panel-title">Delphi Markets</div> <span class="dim">loading…</span></div>
   <div class="panel" id="p-trades"> <div class="panel-title">Recent Trades</div>  <span class="dim">loading…</span></div>
 </div>
-<div class="grid2">
-  <div class="panel" id="p-pool">   <div class="panel-title">Uniswap V3 Pool</div> <span class="dim">loading…</span></div>
-  <div class="panel" id="p-morpho"> <div class="panel-title">Morpho Vault</div>    <span class="dim">loading…</span></div>
+<div class="grid3">
+  <div class="panel" id="p-pool">      <div class="panel-title">Uniswap V3 Pool</div> <span class="dim">loading…</span></div>
+  <div class="panel" id="p-morpho">    <div class="panel-title">Morpho Vault</div>    <span class="dim">loading…</span></div>
+  <div class="panel" id="p-liquidity"> <div class="panel-title">Liquidity</div>       <span class="dim">loading…</span></div>
 </div>
 <div class="panel" id="p-blocks">
   <div class="panel-title">Recent Blocks</div>
@@ -317,6 +318,19 @@ function renderBlocks(d) {
   </table>`;
 }
 
+// ── Liquidity ─────────────────────────────────────────────────────────────
+function renderLiquidity(d) {
+  const r = d.rpc || {}, m = d.delphi || {};
+  const locked = ((m.buy_vol || 0) - (m.sell_vol || 0) - (m.redm_vol || 0)) / 1e6;
+  return `<table>
+    <tr><th>Source</th><th class="r">USDC.e</th></tr>
+    ${row('On-chain Supply', usd(r.usdc_e),   W)}
+    ${row('Delphi Locked',   usd(locked),      G)}
+    ${row('Morpho Vault',    usd(r.morpho_tvl), W)}
+    ${row('Buy Burn Vault',  usd(r.bbv_usdc),  W)}
+  </table>`;
+}
+
 // ── USDC.e Transfers ──────────────────────────────────────────────────────
 function timeAgo(isoStr) {
   const diff = Math.floor((Date.now() - new Date(isoStr).getTime()) / 1000);
@@ -375,8 +389,9 @@ async function refresh() {
     setPanel('p-tokens',  renderTokens(d));
     setPanel('p-delphi',  renderDelphi(d));
     setPanel('p-trades',  renderTrades(d));
-    setPanel('p-pool',    renderPool(d));
-    setPanel('p-morpho',  renderMorpho(d));
+    setPanel('p-pool',      renderPool(d));
+    setPanel('p-morpho',    renderMorpho(d));
+    setPanel('p-liquidity', renderLiquidity(d));
     setPanel('p-blocks',  renderBlocks(d));
     setPanel('p-usdc',    renderUsdce(d));
   } catch (e) {
