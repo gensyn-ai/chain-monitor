@@ -257,17 +257,34 @@ async function syncDelphi(env) {
       .bind(r.id, +r.block_number, +r.timestamp_, r.transactionHash_, r.marketProxy, +r.winningOutcomeIdx, +r.marketCreatorReward, +r.refund, +r.marketCreatorTradingFeesCut));
 }
 
+// ── USDC.e cache (module-level, 30s TTL) ──────────────────────────────────
+
+let _usdceCache = { ts: 0, transfers: [], vol24h: null };
+
+async function getUsdceData() {
+  if (Date.now() - _usdceCache.ts < 30_000) return _usdceCache;
+  const [t, v] = await Promise.allSettled([
+    fetchUsdceTransfers(),
+    fetchUsdce24hVolume(),
+  ]);
+  _usdceCache = {
+    ts:        Date.now(),
+    transfers: t.status === 'fulfilled' ? t.value : _usdceCache.transfers,
+    vol24h:    v.status === 'fulfilled' ? v.value : _usdceCache.vol24h,
+  };
+  return _usdceCache;
+}
+
 // ── /api/data handler ─────────────────────────────────────────────────────
 
 async function handleData(env) {
-  const [blocks, stats, rpc, l1_eth, delphi, usdc, usdc24h] = await Promise.allSettled([
+  const [blocks, stats, rpc, l1_eth, delphi, usdc] = await Promise.allSettled([
     getJson(BLOCKS_API),
     getJson(STATS_API),
     fetchRpc(env),
     fetchL1Eth(env),
     fetchDelphiStats(env.DB),
-    fetchUsdceTransfers(),
-    fetchUsdce24hVolume(),
+    getUsdceData(),
   ]);
 
   return Response.json({
@@ -276,9 +293,9 @@ async function handleData(env) {
     stats:           stats.status    === 'fulfilled' ? stats.value    : {},
     rpc:             rpc.status      === 'fulfilled' ? rpc.value      : { error: String(rpc.reason) },
     l1_eth:          l1_eth.status   === 'fulfilled' ? l1_eth.value   : null,
-    delphi:          delphi.status   === 'fulfilled' ? delphi.value   : {},
-    usdc_transfers:  usdc.status     === 'fulfilled' ? usdc.value     : [],
-    usdc_vol_24h:    usdc24h.status  === 'fulfilled' ? usdc24h.value  : null,
+    delphi:          delphi.status === 'fulfilled' ? delphi.value          : {},
+    usdc_transfers:  usdc.status   === 'fulfilled' ? usdc.value.transfers  : [],
+    usdc_vol_24h:    usdc.status   === 'fulfilled' ? usdc.value.vol24h     : null,
   }, {
     headers: {
       'Cache-Control': 'no-store, no-cache, must-revalidate',
