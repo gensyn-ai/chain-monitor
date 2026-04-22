@@ -272,8 +272,8 @@ function renderPool(d) {
       <td style="color:${D}">Status</td>
       <td class="r bold" style="color:${sc}">${active ? 'ACTIVE' : 'INACTIVE'}</td>
     </tr>
-    ${row('ETH Price',  r.pool_price != null ? '$' + r.pool_price.toFixed(2) : '—', W)}
-    ${row('Liquidity',  n(r.pool_liq),                                               W)}
+    ${row('ETH Price', r.pool_price != null ? '$' + r.pool_price.toFixed(2) : '—', W)}
+    ${row('Pool TVL',  usd(r.pool_tvl),                                             W)}
   </table>`;
 }
 

@@ -7,6 +7,7 @@ const GOLDSKY_URL = 'https://api.goldsky.com/api/public/project_cmnoqdag1obop01z
 const PUBLIC_RPC  = 'https://gensyn-mainnet.g.alchemy.com/public';
 
 const USDC_E       = '0x5b32c997211621d55a89Cc5abAF1cC21F3A6ddF5';
+const WETH         = '0x4200000000000000000000000000000000000006';
 const BBV          = '0x2CBEE00F91A2BC50a7D5C53DFfa6BAB79d7E0243';
 const OP_PORTAL    = '0x0280eb8c305e414d56bf2e396859c27415ba54fc';
 const AI_TOKEN     = '0x4e742319f6b0fec4afa504fc8ed3ceab0fb751a2';
@@ -39,6 +40,8 @@ async function fetchRpc(env) {
     { jsonrpc: '2.0', method: 'eth_call', params: [{ to: POOL,         data: '0x1a686502' },             'latest'], id: 9 },
     { jsonrpc: '2.0', method: 'eth_call', params: [{ to: MORPHO_VAULT, data: '0x01e1d114' },             'latest'], id: 10 },
     { jsonrpc: '2.0', method: 'eth_call', params: [{ to: MORPHO_VAULT, data: '0x18160ddd' },             'latest'], id: 11 },
+    { jsonrpc: '2.0', method: 'eth_call', params: [{ to: WETH,         data: '0x70a08231' + pad(POOL) }, 'latest'], id: 12 },
+    { jsonrpc: '2.0', method: 'eth_call', params: [{ to: USDC_E,       data: '0x70a08231' + pad(POOL) }, 'latest'], id: 13 },
   ];
 
   const t0 = Date.now();
@@ -71,7 +74,12 @@ async function fetchRpc(env) {
     bbv_usdc:    byId[6]  ? hexN(byId[6])  / 1e6  : null,
     ai_supply:   byId[7]  ? hexN(byId[7])  / 1e18 : null,
     pool_price,
-    pool_liq:    byId[9]  ? hexN(byId[9])         : null,
+    pool_tvl:    (() => {
+      const weth_bal  = byId[12] ? hexN(byId[12]) / 1e18 : null;
+      const usdc_bal  = byId[13] ? hexN(byId[13]) / 1e6  : null;
+      if (weth_bal == null || usdc_bal == null || pool_price == null) return null;
+      return weth_bal * pool_price + usdc_bal;
+    })(),
     morpho_tvl:  byId[10] ? hexN(byId[10]) / 1e6  : null,
     morpho_sup:  byId[11] ? hexN(byId[11]) / 1e6  : null,
   };
