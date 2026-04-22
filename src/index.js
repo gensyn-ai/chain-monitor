@@ -10,7 +10,7 @@ const USDC_E       = '0x5b32c997211621d55a89Cc5abAF1cC21F3A6ddF5';
 const BBV          = '0x2CBEE00F91A2BC50a7D5C53DFfa6BAB79d7E0243';
 const OP_PORTAL    = '0x0280eb8c305e414d56bf2e396859c27415ba54fc';
 const AI_TOKEN     = '0x4e742319f6b0fec4afa504fc8ed3ceab0fb751a2';
-const POOL         = '0x3e228359c8cE20FAE623e54b438C74420Ce30e5b';
+const POOL         = '0xf3f77fb85a74f49a3dcb082347d7fefa8aba596f'; // WETH/USDC.e 0.3%
 const MORPHO_VAULT = '0x1b6C76fF584FBee80e4BBd7a4eB060c6C8Dd3B9F';
 
 // ── helpers ───────────────────────────────────────────────────────────────
@@ -57,7 +57,7 @@ async function fetchRpc(env) {
     const sqrtBig = BigInt('0x' + byId[8].slice(2, 66));
     if (sqrtBig > 0n) {
       const sqrt = Number(sqrtBig) / Math.pow(2, 96);
-      pool_price = sqrt * sqrt * 1e12; // token0=AI 18dec, token1=USDC.e 6dec
+      pool_price = sqrt * sqrt * 1e12; // token0=WETH 18dec, token1=USDC.e 6dec
     }
   }
 
