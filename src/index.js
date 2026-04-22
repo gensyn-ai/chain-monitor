@@ -109,7 +109,6 @@ async function ensureSchema(db) {
 }
 
 async function fetchDelphiStats(db) {
-  await ensureSchema(db);
   const [r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13] = await db.batch([
     db.prepare('SELECT COALESCE(SUM(tokens_in),0)  AS v FROM buys'),
     db.prepare('SELECT COALESCE(SUM(tokens_out),0) AS v FROM sells'),
@@ -231,6 +230,7 @@ async function syncTable(db, tableName, entity, fields, makeStmt) {
 
 async function syncDelphi(env) {
   const db = env.DB;
+  await ensureSchema(db);
   await syncTable(db, 'buys', 'gatewayBuys',
     'id block_number timestamp_ transactionHash_ marketProxy buyer outcomeIdx tokensIn sharesOut',
     (db, r) => db.prepare('INSERT OR IGNORE INTO buys VALUES (?,?,?,?,?,?,?,?,?)')
