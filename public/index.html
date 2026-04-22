@@ -264,7 +264,7 @@ function renderTrades(d) {
 // ── Uniswap V3 Pool ───────────────────────────────────────────────────────
 function renderPool(d) {
   const r = d.rpc || {};
-  const active = r.pool_liq != null && r.pool_liq > 0;
+  const active = r.pool_tvl != null && r.pool_tvl > 0;
   const sc = active ? G : D;
   return `<table>
     <tr><th>Metric</th><th class="r">Value</th></tr>
