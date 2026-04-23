@@ -117,7 +117,7 @@ async function ensureSchema(db) {
 }
 
 async function fetchDelphiStats(db) {
-  const [r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13] = await db.batch([
+  const [r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14] = await db.batch([
     db.prepare('SELECT COALESCE(SUM(tokens_in),0)  AS v FROM buys'),
     db.prepare('SELECT COALESCE(SUM(tokens_out),0) AS v FROM sells'),
     db.prepare('SELECT COALESCE(SUM(tokens_out),0) AS v FROM redemptions'),
@@ -143,23 +143,25 @@ async function fetchDelphiStats(db) {
     db.prepare(`SELECT COALESCE(SUM(tokens_in), 0) AS v FROM buys WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 86400`),
     db.prepare(`SELECT COALESCE(SUM(tokens_out), 0) AS v FROM sells WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 86400`),
     db.prepare(`SELECT COALESCE(SUM(market_creator_reward + market_creator_trading_fees), 0) AS v FROM resolutions`),
+    db.prepare(`SELECT tokens_in AS amount FROM buys UNION ALL SELECT tokens_out FROM sells`),
   ]);
   const v = (res) => res.results?.[0]?.v ?? 0;
   return {
-    buy_vol:      v(r0),
-    sell_vol:     v(r1),
-    redm_vol:     v(r2),
-    buy_n:        v(r3),
-    sell_n:       v(r4),
-    redm_n:       v(r5),
-    traders:      v(r6),
-    resolutions:  v(r7),
-    last_buy:     v(r8) || null,
-    recent:       r9.results || [],
-    markets:      v(r10),
-    buy_vol_24h:  v(r11),
-    sell_vol_24h: v(r12),
-    total_fees:   v(r13),
+    buy_vol:       v(r0),
+    sell_vol:      v(r1),
+    redm_vol:      v(r2),
+    buy_n:         v(r3),
+    sell_n:        v(r4),
+    redm_n:        v(r5),
+    traders:       v(r6),
+    resolutions:   v(r7),
+    last_buy:      v(r8) || null,
+    recent:        r9.results || [],
+    markets:       v(r10),
+    buy_vol_24h:   v(r11),
+    sell_vol_24h:  v(r12),
+    total_fees:    v(r13),
+    trade_amounts: (r14.results || []).map(r => r.amount / 1e6),
   };
 }
 

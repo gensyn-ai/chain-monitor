@@ -105,6 +105,10 @@
   <div class="panel-title">Recent USDC.e Transfers</div>
   <span class="dim">loading…</span>
 </div>
+<div class="panel" id="p-histogram">
+  <div class="panel-title">Trade Size Distribution</div>
+  <span class="dim">loading…</span>
+</div>
 
 <div class="footer">
   <span>gensyn-mainnet.explorer.alchemy.com · Goldsky/delphi-mainnet · Cloudflare D1</span>
@@ -366,6 +370,53 @@ function renderUsdce(d) {
   return `<table>${hdr}${rows}</table>`;
 }
 
+// ── Trade Size Histogram ──────────────────────────────────────────────────
+function renderHistogram(d) {
+  const amounts = d.delphi?.trade_amounts || [];
+  if (!amounts.length) return '<span class="dim">No data</span>';
+
+  const BINS = 50;
+  const maxVal = Math.max(...amounts);
+  const bw = maxVal / BINS;
+  const counts = new Array(BINS).fill(0);
+  for (const a of amounts) counts[Math.min(Math.floor(a / bw), BINS - 1)]++;
+  const maxCount = Math.max(...counts);
+
+  const W = 880, H = 140;
+  const pL = 38, pR = 8, pT = 8, pB = 28;
+  const pw = W - pL - pR, ph = H - pT - pB;
+  const barW = pw / BINS;
+
+  const bars = counts.map((c, i) => {
+    const bh = c / maxCount * ph;
+    const x = (pL + i * barW).toFixed(1);
+    const y = (pT + ph - bh).toFixed(1);
+    return `<rect x="${x}" y="${y}" width="${(barW - 1).toFixed(1)}" height="${bh.toFixed(1)}" fill="#4f8ef7"/>`;
+  }).join('');
+
+  const grid = [0.25, 0.5, 0.75, 1].map(f => {
+    const y = (pT + ph - f * ph).toFixed(1);
+    const label = Math.round(f * maxCount);
+    return `<line x1="${pL}" y1="${y}" x2="${pL + pw}" y2="${y}" stroke="#ffffff" stroke-opacity="0.15" stroke-dasharray="3,3"/>
+            <text x="${pL - 3}" y="${(+y + 4).toFixed(1)}" fill="#ffffff" font-size="10" text-anchor="end" font-family="Courier New">${label}</text>`;
+  }).join('');
+
+  const xLabels = [0, 0.25, 0.5, 0.75, 1].map(f => {
+    const val = f * maxVal;
+    const x = (pL + f * pw).toFixed(1);
+    const label = val >= 10 ? val.toFixed(0) : val.toFixed(2);
+    return `<text x="${x}" y="${H - 4}" fill="#ffffff" font-size="10" text-anchor="middle" font-family="Courier New">${label}</text>`;
+  }).join('');
+
+  const axes = `<line x1="${pL}" y1="${pT}" x2="${pL}" y2="${pT + ph}" stroke="#ffffff" stroke-width="1"/>
+                <line x1="${pL}" y1="${pT + ph}" x2="${pL + pw}" y2="${pT + ph}" stroke="#ffffff" stroke-width="1"/>`;
+
+  return `<svg width="100%" viewBox="0 0 ${W} ${H}" style="display:block">
+    ${grid}${bars}${axes}${xLabels}
+  </svg>
+  <div style="text-align:center;font-size:11px;color:${T};margin-top:2px">Trade Size (USDC.e) · n=${amounts.length} · 50 bins</div>`;
+}
+
 // ── refresh loop ──────────────────────────────────────────────────────────
 async function refresh() {
   try {
@@ -386,8 +437,9 @@ async function refresh() {
     setPanel('p-pool',      renderPool(d));
     setPanel('p-morpho',    renderMorpho(d));
     setPanel('p-liquidity', renderLiquidity(d));
-    setPanel('p-blocks',  renderBlocks(d));
-    setPanel('p-usdc',    renderUsdce(d));
+    setPanel('p-blocks',    renderBlocks(d));
+    setPanel('p-usdc',      renderUsdce(d));
+    setPanel('p-histogram', renderHistogram(d));
   } catch (e) {
     document.getElementById('status').textContent = '● ' + e.message;
     document.getElementById('status').style.color = R;
