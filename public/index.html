@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gensyn Chain Monitor</title>
+<link rel="icon" type="image/png" href="/favicon.png">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -146,7 +147,7 @@ function pct_change(curr, prev) {
   const p = (curr - prev) / prev * 100;
   const sign = p >= 0 ? '+' : '';
   const color = p > 0 ? G : p < 0 ? R : D;
-  return `<span style="color:${color}">${sign}${p.toFixed(0)}%</span>`;
+  return `<span style="color:${color};font-weight:bold">${sign}${p.toFixed(0)}%</span>`;
 }
 function setPanel(id, html) {
   const el = document.getElementById(id);
@@ -192,8 +193,10 @@ function renderRpc(d) {
     <tr>
       <td style="color:${D}">Latency</td>
       <td class="r bold" style="color:${W}">${lat} ms</td>
-      ${bar(lat / 10, latColor, 60)}
     </tr>
+    <tr><td colspan="2" style="padding-bottom:4px">
+      <div class="bar" style="width:100%"><div class="bar-fill" style="width:${Math.min(lat/10,100).toFixed(1)}%;background:${latColor}"></div></div>
+    </td></tr>
     ${row('RPC Block',  n(r.block),                          W)}
     ${row('Block Lag',  lag != null ? lag + ' blks' : '—',  lagColor)}
     ${row('Peers',      r.peers != null ? r.peers : '—',    peerColor)}
@@ -210,25 +213,25 @@ function renderDelphi(d) {
   return `<table>
     <tr><th>Activity</th><th class="r">USDC</th><th class="r" style="padding-left:8px">N</th><th></th></tr>
     <tr>
-      <td style="color:${G}">Buys</td>
+      <td class="bold" style="color:${G}">BUYS</td>
       <td class="r bold" style="color:${W}">${$m(bv)}</td>
       <td class="r" style="color:${W};padding-left:8px">${m.buy_n || 0}</td>
       ${bar(bv / total * 100, G)}
     </tr>
     <tr>
-      <td style="color:${R}">Sells</td>
+      <td class="bold" style="color:${R}">SELLS</td>
       <td class="r bold" style="color:${W}">${$m(sv)}</td>
       <td class="r" style="color:${W};padding-left:8px">${m.sell_n || 0}</td>
       ${bar(sv / total * 100, R)}
     </tr>
     <tr>
-      <td style="color:${T}">Redemptions</td>
+      <td class="bold" style="color:${T}">REDEMPTIONS</td>
       <td class="r bold" style="color:${W}">${$m(rv)}</td>
       <td class="r" style="color:${W};padding-left:8px">${m.redm_n || 0}</td>
       ${bar(rv / total * 100, T)}
     </tr>
     <tr><td colspan="4"><hr class="sep"></td></tr>
-    <tr><th></th><th class="r">24h</th><th class="r" style="padding-left:12px">Total</th><th class="r" style="padding-left:12px">DoD</th></tr>
+    <tr><th></th><th class="r">24h</th><th class="r" style="padding-left:12px">Total</th><th class="r" style="padding-left:12px">24h %chg</th></tr>
     <tr><td style="color:${W}">Markets</td>     <td class="r bold" style="color:${W}">${m.markets_24h ?? '—'}</td>     <td class="r bold" style="color:${W};padding-left:12px">${m.markets ?? '—'}</td>        <td class="r" style="padding-left:12px">${pct_change(m.markets_24h, m.markets_prev24h)}</td></tr>
     <tr><td style="color:${W}">Volume</td>      <td class="r bold" style="color:${W}">${$m((m.buy_vol_24h || 0) + (m.sell_vol_24h || 0))}</td> <td class="r bold" style="color:${W};padding-left:12px">${$m(bv + sv)}</td> <td class="r" style="padding-left:12px">${pct_change((m.buy_vol_24h || 0) + (m.sell_vol_24h || 0), m.vol_prev24h)}</td></tr>
     <tr><td style="color:${W}">Traders</td>     <td class="r bold" style="color:${W}">${m.traders_24h || 0}</td>       <td class="r bold" style="color:${W};padding-left:12px">${m.traders || 0}</td>        <td class="r" style="padding-left:12px">${pct_change(m.traders_24h, m.traders_prev24h)}</td></tr>

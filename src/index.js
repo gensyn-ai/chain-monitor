@@ -131,7 +131,7 @@ async function fetchDelphiStats(db) {
       SELECT 'BUY'  AS side, timestamp_, buyer  AS addr, market_proxy, tokens_in  AS usdc FROM buys
       UNION ALL
       SELECT 'SELL' AS side, timestamp_, seller AS addr, market_proxy, tokens_out AS usdc FROM sells
-      ORDER BY timestamp_ DESC LIMIT 8
+      ORDER BY timestamp_ DESC LIMIT 10
     `),
     db.prepare(`
       SELECT COUNT(DISTINCT market_proxy) AS v FROM (
