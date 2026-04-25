@@ -93,24 +93,20 @@
   <div class="panel" id="p-delphi"> <div class="panel-title">Delphi Markets</div> <span class="dim">loading…</span></div>
   <div class="panel" id="p-trades"> <div class="panel-title">Recent Trades</div>  <span class="dim">loading…</span></div>
 </div>
-<div class="panel" id="p-trades-per-hour">
-  <div class="panel-title">Trades Per Hour</div>
-  <span class="dim">loading…</span>
-</div>
 <div class="grid2">
   <div class="panel" id="p-histogram">
     <div class="panel-title">Trade Size Distribution</div>
     <span class="dim">loading…</span>
   </div>
-  <div class="panel" id="p-top-traders"><div class="panel-title">Top Traders</div><span class="dim">loading…</span></div>
+  <div class="panel" id="p-trades-per-hour"><div class="panel-title">Weekly trading volume</div><span class="dim">loading…</span></div>
 </div>
 <div class="grid2">
   <div class="panel" id="p-pool">   <div class="panel-title">ETH / USDC.e Pool</div> <span class="dim">loading…</span></div>
   <div class="panel" id="p-morpho"> <div class="panel-title">Morpho Vault</div>       <span class="dim">loading…</span></div>
 </div>
-<div class="panel" id="p-blocks">
-  <div class="panel-title">Recent Blocks</div>
-  <span class="dim">loading…</span>
+<div class="grid2">
+  <div class="panel" id="p-blocks"><div class="panel-title">Recent Blocks</div><span class="dim">loading…</span></div>
+  <div class="panel" id="p-top-traders"><div class="panel-title">Top Traders</div><span class="dim">loading…</span></div>
 </div>
 <div class="panel" id="p-usdc">
   <div class="panel-title">Recent USDC.e Transfers</div>
@@ -301,7 +297,7 @@ function renderMorpho(d) {
 function renderBlocks(d) {
   const blocks = d.blocks || [];
   if (!blocks.length) return '<span class="dim">loading…</span>';
-  const rows = blocks.slice(0, 10).map(b => {
+  const rows = blocks.slice(0, 11).map(b => {
     const pct = b.gas_used_percentage || 0;
     return `<tr>
       <td class="bold" style="color:${W}">${b.height || '—'}</td>
@@ -406,17 +402,18 @@ function renderTradesPerHour(d) {
   const raw = d.delphi?.trades_per_hour || [];
   if (!raw.length) return '<span class="dim">No data</span>';
 
-  // Fill all 48 hour buckets so gaps show as zero bars
-  const nowHr = Math.floor(Date.now() / 3600000);
+  // Fill 28 x 6h buckets (7 days) so gaps show as zero bars
+  const BUCKETS = 28, BUCKET_S = 21600;
+  const nowBucket = Math.floor(Date.now() / (BUCKET_S * 1000));
   const map = new Map(raw.map(r => [r.hr, r.n]));
-  const hours = Array.from({length: 48}, (_, i) => nowHr - 47 + i);
-  const counts = hours.map(hr => map.get(hr) || 0);
+  const buckets = Array.from({length: BUCKETS}, (_, i) => nowBucket - (BUCKETS - 1) + i);
+  const counts = buckets.map(b => map.get(b) || 0);
   const maxCount = Math.max(...counts, 1);
 
   const W = 880, H = 160;
   const pL = 38, pR = 8, pT = 8, pB = 28;
   const pw = W - pL - pR, ph = H - pT - pB;
-  const barW = pw / 48;
+  const barW = pw / BUCKETS;
 
   const bars = counts.map((c, i) => {
     const bh = c / maxCount * ph;
@@ -431,11 +428,13 @@ function renderTradesPerHour(d) {
             <text x="${pL - 3}" y="${(+y + 4).toFixed(1)}" fill="#ffffff" font-size="14" text-anchor="end" font-family="Courier New">${Math.round(f * maxCount)}</text>`;
   }).join('');
 
-  const xLabels = [-48, -36, -24, -12, 0].map(offset => {
-    const i = 48 + offset;
+  // x-axis: labels every 1 day (4 buckets)
+  const xLabels = [0, 4, 8, 12, 16, 20, 24, BUCKETS].map((bi, idx, arr) => {
+    const i = BUCKETS - (BUCKETS - bi);
     const x = (pL + i * barW).toFixed(1);
-    const label = offset === 0 ? 'now' : Math.abs(offset) + 'h ago';
-    const anchor = offset === 0 ? 'end' : offset === -48 ? 'start' : 'middle';
+    const daysAgo = Math.round((BUCKETS - bi) * 6 / 24);
+    const label = bi === BUCKETS ? 'now' : daysAgo + 'd ago';
+    const anchor = bi === BUCKETS ? 'end' : bi === 0 ? 'start' : 'middle';
     return `<text x="${x}" y="${H - 4}" fill="#ffffff" font-size="14" text-anchor="${anchor}" font-family="Courier New">${label}</text>`;
   }).join('');
 

@@ -148,7 +148,7 @@ async function fetchDelphiStats(db) {
     db.prepare(`SELECT COUNT(*) AS v FROM resolutions WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 86400`),
     db.prepare(`SELECT COUNT(DISTINCT market_proxy) AS v FROM (SELECT market_proxy FROM buys WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 86400 UNION SELECT market_proxy FROM sells WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 86400 UNION SELECT market_proxy FROM resolutions WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 86400)`),
     db.prepare(`SELECT COALESCE(SUM(market_creator_reward + market_creator_trading_fees), 0) AS v FROM resolutions WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 86400`),
-    db.prepare(`SELECT addr, COUNT(*) AS n, SUM(vol) AS vol FROM (SELECT buyer AS addr, tokens_in AS vol FROM buys UNION ALL SELECT seller AS addr, tokens_out AS vol FROM sells) GROUP BY addr ORDER BY n DESC LIMIT 10`),
+    db.prepare(`SELECT addr, COUNT(*) AS n, SUM(vol) AS vol FROM (SELECT buyer AS addr, tokens_in AS vol FROM buys UNION ALL SELECT seller AS addr, tokens_out AS vol FROM sells) GROUP BY addr ORDER BY n DESC LIMIT 5`),
     db.prepare(`SELECT COUNT(DISTINCT market_proxy) AS v FROM (SELECT market_proxy FROM buys UNION SELECT market_proxy FROM sells) WHERE market_proxy NOT IN (SELECT market_proxy FROM resolutions)`),
     db.prepare(`SELECT COALESCE(SUM(tokens_in), 0) AS v FROM buys WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 172800 AND timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 86400`),
     db.prepare(`SELECT COALESCE(SUM(tokens_out), 0) AS v FROM sells WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 172800 AND timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 86400`),
@@ -159,7 +159,7 @@ async function fetchDelphiStats(db) {
     db.prepare(`SELECT COUNT(DISTINCT market_proxy) AS v FROM (SELECT market_proxy FROM buys WHERE timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 86400 UNION SELECT market_proxy FROM sells WHERE timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 86400) WHERE market_proxy NOT IN (SELECT market_proxy FROM resolutions WHERE timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 86400)`),
     db.prepare(`SELECT COUNT(*) AS v FROM (SELECT id FROM buys WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 86400 UNION ALL SELECT id FROM sells WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 86400)`),
     db.prepare(`SELECT COUNT(*) AS v FROM (SELECT id FROM buys WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 172800 AND timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 86400 UNION ALL SELECT id FROM sells WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 172800 AND timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 86400)`),
-    db.prepare(`SELECT CAST(timestamp_ / 3600 AS INTEGER) AS hr, COUNT(*) AS n FROM (SELECT timestamp_ FROM buys WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 172800 UNION ALL SELECT timestamp_ FROM sells WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 172800) GROUP BY hr ORDER BY hr ASC`),
+    db.prepare(`SELECT CAST(timestamp_ / 21600 AS INTEGER) AS hr, COUNT(*) AS n FROM (SELECT timestamp_ FROM buys WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 604800 UNION ALL SELECT timestamp_ FROM sells WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 604800) GROUP BY hr ORDER BY hr ASC`),
   ]);
   const v = (res) => res.results?.[0]?.v ?? 0;
   return {
