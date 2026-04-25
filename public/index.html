@@ -87,7 +87,7 @@
 <div class="grid3">
   <div class="panel" id="p-chain">  <div class="panel-title">Chain</div>      <span class="dim">loading…</span></div>
   <div class="panel" id="p-rpc">    <div class="panel-title">RPC Health</div> <span class="dim">loading…</span></div>
-  <div class="panel" id="p-liquidity"> <div class="panel-title">Liquidity</div>  <span class="dim">loading…</span></div>
+  <div class="panel" id="p-liquidity"> <div class="panel-title">Funding</div>  <span class="dim">loading…</span></div>
 </div>
 <div class="grid2">
   <div class="panel" id="p-delphi"> <div class="panel-title">Delphi Markets</div> <span class="dim">loading…</span></div>
@@ -212,7 +212,7 @@ function renderDelphi(d) {
   const total = (bv + sv + rv) || 1;
   const $m = v => usd(v / 1e6);
   return `<table>
-    <tr><th>Activity</th><th class="r">USDC</th><th class="r" style="padding-left:8px">N</th><th></th></tr>
+    <tr><th>Activity</th><th class="r">USDC.e</th><th class="r" style="padding-left:8px">N</th><th></th></tr>
     <tr>
       <td class="bold" style="color:${G}">BUYS</td>
       <td class="r bold" style="color:${W}">${$m(bv)}</td>
@@ -326,12 +326,12 @@ function renderLiquidity(d) {
   const locked = ((m.buy_vol || 0) - (m.sell_vol || 0) - (m.redm_vol || 0)) / 1e6;
   return `<table>
     <tr><th>Source</th><th class="r">Value</th></tr>
-    ${row('On-chain Supply', usd(r.usdc_e),   W)}
     ${row('Delphi Locked',   usd(locked),      G)}
     ${row('Buy Burn Vault',  usd(r.bbv_usdc),  W)}
-    <tr><td colspan="2"><hr class="sep"></td></tr>
-    ${row('$ETH Supply',  d.l1_eth != null ? d.l1_eth.toFixed(4) + ' $ETH' : '—', W)}
-    ${row('$AI Supply',  r.ai_supply != null ? (r.ai_supply / 1e9).toFixed(2) + 'B' : '—', W)}
+    <tr><td colspan="2"><div class="panel-title" style="margin:4px 0 2px">Supply</div></td></tr>
+    ${row('$ETH',   d.l1_eth != null ? d.l1_eth.toFixed(4) : '—', W)}
+    ${row('$AI',    r.ai_supply != null ? (r.ai_supply / 1e9).toFixed(2) + 'B' : '—', W)}
+    ${row('$USDC.e', r.usdc_e != null ? Number(r.usdc_e).toLocaleString('en', {minimumFractionDigits:2, maximumFractionDigits:2}) : '—', W)}
   </table>`;
 }
 
