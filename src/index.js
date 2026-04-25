@@ -117,7 +117,7 @@ async function ensureSchema(db) {
 }
 
 async function fetchDelphiStats(db) {
-  const [r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15, r16, r17, r18, r19, r20, r21, r22, r23, r24, r25, r26, r27] = await db.batch([
+  const [r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15, r16, r17, r18, r19, r20, r21, r22, r23, r24, r25, r26, r27, r28, r29] = await db.batch([
     db.prepare('SELECT COALESCE(SUM(tokens_in),0)  AS v FROM buys'),
     db.prepare('SELECT COALESCE(SUM(tokens_out),0) AS v FROM sells'),
     db.prepare('SELECT COALESCE(SUM(tokens_out),0) AS v FROM redemptions'),
@@ -157,6 +157,8 @@ async function fetchDelphiStats(db) {
     db.prepare(`SELECT COUNT(DISTINCT market_proxy) AS v FROM (SELECT market_proxy FROM buys WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 172800 AND timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 86400 UNION SELECT market_proxy FROM sells WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 172800 AND timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 86400 UNION SELECT market_proxy FROM resolutions WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 172800 AND timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 86400)`),
     db.prepare(`SELECT COALESCE(SUM(market_creator_reward + market_creator_trading_fees), 0) AS v FROM resolutions WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 172800 AND timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 86400`),
     db.prepare(`SELECT COUNT(DISTINCT market_proxy) AS v FROM (SELECT market_proxy FROM buys WHERE timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 86400 UNION SELECT market_proxy FROM sells WHERE timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 86400) WHERE market_proxy NOT IN (SELECT market_proxy FROM resolutions WHERE timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 86400)`),
+    db.prepare(`SELECT COUNT(*) AS v FROM (SELECT id FROM buys WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 86400 UNION ALL SELECT id FROM sells WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 86400)`),
+    db.prepare(`SELECT COUNT(*) AS v FROM (SELECT id FROM buys WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 172800 AND timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 86400 UNION ALL SELECT id FROM sells WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 172800 AND timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 86400)`),
   ]);
   const v = (res) => res.results?.[0]?.v ?? 0;
   return {
@@ -182,6 +184,8 @@ async function fetchDelphiStats(db) {
     top_traders:         r19.results || [],
     markets_live:        v(r20),
     markets_live_prev:   v(r27),
+    trades_24h:          v(r28),
+    trades_prev24h:      v(r29),
     vol_prev24h:         v(r21) + v(r22),
     traders_prev24h:     v(r23),
     resolutions_prev24h: v(r24),
