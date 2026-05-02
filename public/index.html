@@ -18,11 +18,6 @@
     max-width: 960px;
     margin: 0 auto;
   }
-  .nav { display: flex; gap: 8px; }
-  .nav-btn { background: none; border: 1px solid rgba(255,255,255,0.3); color: rgba(255,255,255,0.55); font-family: inherit; font-size: 14px; padding: 2px 12px; cursor: pointer; }
-  .nav-btn.active { background: rgba(255,255,255,0.15); border-color: #fff; color: #fff; font-weight: bold; }
-  .page { display: none; }
-  .page.active { display: block; }
   .header {
     display: flex;
     justify-content: space-between;
@@ -85,10 +80,7 @@
 
 <div class="container">
 <div class="header">
-  <div class="nav">
-    <button class="nav-btn active" data-page="chain" onclick="showPage('chain')">Delphi</button>
-    <button class="nav-btn" data-page="token" onclick="showPage('token')">$AI Token</button>
-  </div>
+  <span style="font-weight:bold">Gensyn Monitor</span>
   <span class="header-right" id="ts">—</span>
 </div>
 
@@ -98,7 +90,6 @@
   <div class="panel" id="p-liquidity"> <div class="panel-title">Funding</div>  <span class="dim">loading…</span></div>
 </div>
 
-<div id="page-chain" class="page active">
 <div class="grid2">
   <div class="panel" id="p-delphi"> <div class="panel-title">Delphi Markets</div> <span class="dim">loading…</span></div>
   <div class="panel" id="p-trades"> <div class="panel-title">Recent Trades</div>  <span class="dim">loading…</span></div>
@@ -114,19 +105,6 @@
   <div class="panel" id="p-pool">       <div class="panel-title">ETH / USDC.e Pool</div> <span class="dim">loading…</span></div>
   <div class="panel" id="p-top-traders"><div class="panel-title">Top Traders</div>        <span class="dim">loading…</span></div>
 </div>
-</div><!-- /page-chain -->
-
-<div id="page-token" class="page">
-<div class="grid3">
-  <div class="panel" id="p-morpho"><div class="panel-title">Morpho Vault</div><span class="dim">loading…</span></div>
-  <div class="panel" id="p-token-market"><div class="panel-title">Market</div><span class="dim">loading…</span></div>
-  <div class="panel" id="p-token-price"><div class="panel-title">$AI</div><span class="dim">loading…</span></div>
-</div>
-<div class="grid2">
-  <div class="panel" id="p-token-chart"><div class="panel-title">$AI / USD (history)</div><span class="dim">loading…</span></div>
-  <div class="panel" id="p-token-chart-1d"><div class="panel-title">$AI / USD (24h)</div><span class="dim">loading…</span></div>
-</div>
-</div><!-- /page-token -->
 
 <div class="footer">
   <span>gensyn-mainnet.explorer.alchemy.com · Goldsky/delphi-mainnet · Cloudflare D1</span>
@@ -136,18 +114,10 @@
 
 <script>
 const G = '#55cc55', R = '#cc5566', T = '#ddcc44', D = '#ffffff', W = '#ffffff';
-let _holdingPct = null;
-
 
 const PT = 'America/Los_Angeles';
 function fmtPT(date, opts) {
   return new Date(date).toLocaleString('en-US', { timeZone: PT, ...opts });
-}
-function ptHour(ts) {
-  return fmtPT(ts, { hour: 'numeric', hour12: true });
-}
-function ptDate(ts) {
-  return fmtPT(ts, { month: 'numeric', day: 'numeric' });
 }
 
 function n(v, fb = '—') {
@@ -309,19 +279,6 @@ function renderPool(d) {
     ${row('Vol 24h',   d.pool_vol_24h != null ? usd(d.pool_vol_24h / 1e6) : '—', T)}
     ${row('ETH Price', r.pool_price != null ? '$' + r.pool_price.toFixed(2) : '—', W)}
     ${row('Pool TVL',  usd(r.pool_tvl),                                             W)}
-  </table>`;
-}
-
-// ── Morpho Vault ──────────────────────────────────────────────────────────
-function renderMorpho(d) {
-  const r = d.rpc || {};
-  const nav = (r.morpho_tvl != null && r.morpho_sup != null && r.morpho_sup > 0)
-    ? r.morpho_tvl / r.morpho_sup : null;
-  return `<table>
-    <tr><th>Metric</th><th class="r">Value</th></tr>
-    ${row('Vault',      'gpUSDC',          W)}
-    ${row('TVL',        usd(r.morpho_tvl), W)}
-    ${nav != null ? row('NAV / share', '$' + nav.toFixed(4), W) : ''}
   </table>`;
 }
 
@@ -534,167 +491,6 @@ function renderHistogram(d) {
   <div style="text-align:center;font-size:14px;color:${T};margin-top:4px">Trade Size (USDC.e) · n=${amounts.length} · 30 bins</div>`;
 }
 
-// ── Page navigation ───────────────────────────────────────────────────────
-function showPage(name) {
-  document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
-  document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
-  document.getElementById('page-' + name).classList.add('active');
-  document.querySelector(`.nav-btn[data-page="${name}"]`).classList.add('active');
-}
-
-// ── $AI Token ─────────────────────────────────────────────────────────────
-function fmtPct(v) {
-  if (v == null) return '<span style="color:rgba(255,255,255,0.4)">—</span>';
-  const sign = v >= 0 ? '+' : '';
-  const bg = v > 0 ? G : v < 0 ? R : 'transparent';
-  const color = v > 0 ? '#000000' : v < 0 ? '#ffffff' : D;
-  return `<span style="background:${bg};color:${color};font-weight:bold;padding:1px 5px">${sign}${v.toFixed(2)}%</span>`;
-}
-function fmtPrice(v) {
-  if (v == null) return '—';
-  if (v >= 1)    return '$' + v.toLocaleString('en', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
-  return '$' + v.toPrecision(4);
-}
-function fmtLarge(v) {
-  if (v == null) return '—';
-  if (v >= 1e9) return '$' + (v / 1e9).toFixed(2) + 'B';
-  if (v >= 1e6) return '$' + (v / 1e6).toFixed(2) + 'M';
-  return '$' + v.toLocaleString('en');
-}
-function fmtSupply(v) {
-  if (v == null) return '—';
-  if (v >= 1e9) return (v / 1e9).toFixed(2) + 'B';
-  if (v >= 1e6) return (v / 1e6).toFixed(2) + 'M';
-  return v.toLocaleString('en');
-}
-
-function fmtEth(v) {
-  if (v == null) return '—';
-  if (v >= 0.001) return 'Ξ' + v.toPrecision(3);
-  return 'Ξ' + v.toPrecision(2);
-}
-
-function renderTokenPrice(t) {
-  return `<table>
-    <tr><th></th><th class="r">ETH</th><th class="r">USD</th></tr>
-    <tr><td style="color:${D}">Price</td><td class="r bold">${fmtEth(t.price_eth)}</td><td class="r bold">${fmtPrice(t.price)}</td></tr>
-    <tr><td style="color:${D}">1h</td><td class="r">${fmtPct(t.price_change_1h_eth)}</td><td class="r">${fmtPct(t.price_change_1h)}</td></tr>
-    <tr><td style="color:${D}">24h</td><td class="r">${fmtPct(t.price_change_24h_eth)}</td><td class="r">${fmtPct(t.price_change_24h)}</td></tr>
-    <tr><td style="color:${D}">7d</td><td class="r">${fmtPct(t.price_change_7d_eth)}</td><td class="r">${fmtPct(t.price_change_7d)}</td></tr>
-    <tr><td style="color:${D}">30d</td><td class="r">${fmtPct(t.price_change_30d_eth)}</td><td class="r">${fmtPct(t.price_change_30d)}</td></tr>
-  </table>`;
-}
-
-function renderTokenMarket(t) {
-  const circ_pct = t.circulating && t.total_supply ? (t.circulating / t.total_supply * 100).toFixed(1) + '%' : '—';
-  return `<table>
-    <tr><td style="color:${D}">Market Cap</td><td class="r bold" style="color:${W}">${fmtLarge(t.market_cap)}</td></tr>
-    <tr><td style="color:${D}">FDV</td><td class="r bold" style="color:${W}">${fmtLarge(t.fdv)}</td></tr>
-    <tr><td style="color:${D}">Volume 24h</td><td class="r bold" style="color:${T}">${fmtLarge(t.volume_24h)}</td></tr>
-    <tr><td colspan="2"><hr class="sep"></td></tr>
-    <tr><td style="color:${D}">Circ %</td><td class="r bold" style="color:${W}">${circ_pct}</td></tr>
-    ${t.airdrop?.held_value_pct != null ? `<tr><td style="color:${D}">Sale value held (%)</td><td class="r bold" style="color:${T}">${t.airdrop.held_value_pct.toFixed(1)}%</td></tr>` : ''}
-  </table>`;
-}
-
-function renderCandleChart(ohlc, labelFn) {
-  if (!ohlc || !ohlc.length) return '<span class="dim">No data</span>';
-  const SVG_W = 800, SVG_H = 540;
-  const pL = 64, pR = 12, pT = 16, pB = 28;
-  const gap = 14;
-  const pw = SVG_W - pL - pR;
-  const usable = SVG_H - pT - pB - gap;
-  const candlePh = Math.round(usable * 0.74);
-  const volPh    = usable - candlePh;
-  const candleTop = pT;
-  const volTop    = pT + candlePh + gap;
-
-  const minV = Math.min(...ohlc.map(c => c[3]));
-  const maxV = Math.max(...ohlc.map(c => c[2]));
-  const range = maxV - minV || 1;
-  const maxVol = Math.max(...ohlc.map(c => c[5] || 0)) || 1;
-  const n = ohlc.length;
-  const cw = Math.max(2, Math.floor(pw / n) - 1);
-  const cx = i => pL + (i + 0.5) * (pw / n);
-  const yP = v => candleTop + candlePh - ((v - minV) / range) * candlePh;
-  const yV = v => volTop + volPh - (v / maxVol) * volPh;
-
-  const candles = ohlc.map(([ts, o, h, l, c, vol], i) => {
-    const col = c >= o ? G : R;
-    const x0 = cx(i);
-    const bTop = Math.min(yP(o), yP(c)).toFixed(1);
-    const bH   = Math.max(1, Math.abs(yP(c) - yP(o))).toFixed(1);
-    const vH   = Math.max(1, ((vol || 0) / maxVol) * volPh).toFixed(1);
-    const vY   = (volTop + volPh - +vH).toFixed(1);
-    return `<line x1="${x0.toFixed(1)}" y1="${yP(h).toFixed(1)}" x2="${x0.toFixed(1)}" y2="${yP(l).toFixed(1)}" stroke="${col}" stroke-width="1"/>
-            <rect x="${(x0-cw/2).toFixed(1)}" y="${bTop}" width="${cw}" height="${bH}" fill="${col}"/>
-            <rect x="${(x0-cw/2).toFixed(1)}" y="${vY}" width="${cw}" height="${vH}" fill="${col}" opacity="0.7"/>`;
-  }).join('');
-
-  const priceGrid = [0, 0.25, 0.5, 0.75, 1].map(f => {
-    const yy = (candleTop + candlePh - f * candlePh).toFixed(1);
-    return `<line x1="${pL}" y1="${yy}" x2="${pL+pw}" y2="${yy}" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
-            <text x="${pL-4}" y="${(+yy+4).toFixed(1)}" fill="rgba(255,255,255,0.6)" font-size="12" text-anchor="end" font-family="Menlo, Monaco, Consolas, Courier New, monospace">$${(minV+f*range).toPrecision(2)}</text>`;
-  }).join('');
-
-  const volGrid = [0, 0.5, 1].map(f => {
-    const yy = (volTop + volPh - f * volPh).toFixed(1);
-    const label = f === 0 ? '' : '$' + (maxVol * f / 1e6).toFixed(0) + 'M';
-    return `<line x1="${pL}" y1="${yy}" x2="${pL+pw}" y2="${yy}" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
-            <text x="${pL-4}" y="${(+yy+4).toFixed(1)}" fill="rgba(255,255,255,0.4)" font-size="11" text-anchor="end" font-family="Menlo, Monaco, Consolas, Courier New, monospace">${label}</text>`;
-  }).join('');
-
-  const xLabels = [0, Math.floor(n/4), Math.floor(n/2), Math.floor(3*n/4), n-1].map(i =>
-    `<text x="${cx(i).toFixed(1)}" y="${SVG_H-4}" fill="rgba(255,255,255,0.6)" font-size="12" text-anchor="middle" font-family="Menlo, Monaco, Consolas, Courier New, monospace">${labelFn(ohlc[i][0])}</text>`
-  ).join('');
-
-  return `<svg width="100%" viewBox="0 0 ${SVG_W} ${SVG_H}" style="display:block">
-    ${priceGrid}${volGrid}${candles}
-    <line x1="${pL}" y1="${candleTop}" x2="${pL}" y2="${candleTop+candlePh}" stroke="rgba(255,255,255,0.4)" stroke-width="1"/>
-    <line x1="${pL}" y1="${candleTop+candlePh}" x2="${pL+pw}" y2="${candleTop+candlePh}" stroke="rgba(255,255,255,0.4)" stroke-width="1"/>
-    <line x1="${pL}" y1="${volTop}" x2="${pL}" y2="${volTop+volPh}" stroke="rgba(255,255,255,0.25)" stroke-width="1"/>
-    <line x1="${pL}" y1="${volTop+volPh}" x2="${pL+pw}" y2="${volTop+volPh}" stroke="rgba(255,255,255,0.25)" stroke-width="1"/>
-    ${xLabels}
-  </svg>`;
-}
-
-// ── Gensyn Airdrop ────────────────────────────────────────────────────────
-function renderAirdrop(t) {
-  const a = t.airdrop;
-  if (!a) return '<span class="dim">No data</span>';
-  const fmtAI = v => v != null ? fmtSupply(v) + ' $AI' : '—';
-  const claimPct = a.total > 0 ? a.claimed / a.total * 100 : 0;
-  const claimPctStr = a.total > 0 ? claimPct.toFixed(1) + '%' : '—';
-  const remPct = a.total > 0 ? (100 - claimPct).toFixed(1) + '%' : '—';
-  return `<table>
-    ${row('Total Allocated', fmtAI(a.total),    W)}
-    ${row('Claimed',         fmtAI(a.claimed),  G, claimPctStr)}
-    <tr><td colspan="3" style="padding:2px 0 4px">
-      <div class="bar" style="width:100%"><div class="bar-fill" style="width:${claimPct.toFixed(1)}%;background:${G}"></div></div>
-    </td></tr>
-    ${row('Remaining',       fmtAI(a.remaining), T, remPct)}
-    <tr><td colspan="3"><hr class="sep"></td></tr>
-    ${row('Claimants',  n(a.claimants),  W)}
-    ${row('Claim Txs',  n(a.claim_count), W)}
-  </table>`;
-}
-
-async function refreshToken() {
-  try {
-    const r = await fetch('/api/token?t=' + Date.now());
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const t = await r.json();
-    setPanel('p-token-price',    renderTokenPrice(t));
-    setPanel('p-token-market',   renderTokenMarket(t));
-    setPanel('p-token-chart-1d', renderCandleChart(t.ohlc_24h, ptHour));
-    setPanel('p-token-chart',    renderCandleChart(t.ohlc_30d, ptHour));
-    if (t.airdrop?.held_pct != null) _holdingPct = t.airdrop.held_pct;
-  } catch (e) {
-    ['p-token-price','p-token-market','p-token-chart-1d','p-token-chart']
-      .forEach(id => setPanel(id, `<span style="color:${R}">${e.message}</span>`));
-  }
-}
-
 // ── refresh loop ──────────────────────────────────────────────────────────
 async function refresh() {
   try {
@@ -712,7 +508,6 @@ async function refresh() {
     setPanel('p-delphi',   renderDelphi(d));
     setPanel('p-trades',   renderTrades(d));
     setPanel('p-pool',     renderPool(d));
-    setPanel('p-morpho',   renderMorpho(d));
     setPanel('p-trades-per-hour', renderTradesPerHour(d));
     setPanel('p-histogram',       renderHistogram(d));
     setPanel('p-top-traders',  renderTopTraders(d));
@@ -735,9 +530,6 @@ setInterval(tickClock, 1000);
 
 refresh();
 setInterval(refresh, 2000);
-
-refreshToken();
-setInterval(refreshToken, 60000);
 </script>
 </body>
 </html>
