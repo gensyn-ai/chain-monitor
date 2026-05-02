@@ -593,7 +593,7 @@ function renderTokenMarket(t) {
     <tr><td style="color:${D}">Volume 24h</td><td class="r bold" style="color:${T}">${fmtLarge(t.volume_24h)}</td></tr>
     <tr><td colspan="2"><hr class="sep"></td></tr>
     <tr><td style="color:${D}">Circ %</td><td class="r bold" style="color:${W}">${circ_pct}</td></tr>
-    ${_holdingPct != null ? `<tr><td style="color:${D}">% sale held</td><td class="r bold" style="color:${T}">${_holdingPct.toFixed(1)}%</td></tr>` : ''}
+    ${t.airdrop?.held_pct != null ? `<tr><td style="color:${D}">% sale held</td><td class="r bold" style="color:${T}">${t.airdrop.held_pct.toFixed(1)}%</td></tr>` : ''}
   </table>`;
 }
 
