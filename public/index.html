@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Gensyn Chain Monitor</title>
+<title>Gensyn Monitor</title>
 <link rel="icon" type="image/png" href="/favicon.png">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     background: #2a5cbf;
     color: #ffffff;
-    font-family: 'Courier New', Courier, monospace;
+    font-family: Menlo, Monaco, Consolas, 'Courier New', monospace;
     font-size: 14px;
     padding: 24px;
   }
@@ -18,16 +18,19 @@
     max-width: 960px;
     margin: 0 auto;
   }
+  .nav { display: flex; gap: 8px; }
+  .nav-btn { background: none; border: 1px solid rgba(255,255,255,0.3); color: rgba(255,255,255,0.55); font-family: inherit; font-size: 14px; padding: 2px 12px; cursor: pointer; }
+  .nav-btn.active { background: rgba(255,255,255,0.15); border-color: #fff; color: #fff; font-weight: bold; }
+  .page { display: none; }
+  .page.active { display: block; }
   .header {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
     margin-bottom: 10px;
-    font-weight: bold;
     font-size: 14px;
-    letter-spacing: 1px;
   }
-  .header-right { font-weight: normal; font-size: 13px; color: #ffffff; }
+  .header-right { font-size: 14px; color: rgba(255,255,255,0.6); }
 
   /* panel with centered dashed title */
   .panel { border: 1px solid #ffffff; padding: 8px 10px; margin-bottom: 6px; min-width: 0; }
@@ -53,10 +56,10 @@
 
   table { width: 100%; border-collapse: collapse; }
   td, th { padding: 2px 0; white-space: nowrap; vertical-align: middle; }
-  th { font-weight: bold; color: #ffffff; font-size: 13px; text-align: left; padding-bottom: 3px; }
+  th { font-weight: bold; color: #ffffff; font-size: 14px; text-align: left; padding-bottom: 3px; }
   th.r { text-align: right; }
   td.r  { text-align: right; }
-  td.note { color: #ffffff; font-size: 12px; padding-left: 10px; }
+  td.note { color: #ffffff; font-size: 14px; padding-left: 10px; }
 
   .bold  { font-weight: bold; }
   .green { color: #55cc55; }
@@ -64,7 +67,7 @@
   .tan   { color: #ddcc44; }
   .dim   { color: rgba(255,255,255,0.45); }
 
-  .bar-wrap { padding-left: 8px; vertical-align: middle; }
+  .bar-wrap { padding-left: 8px; vertical-align: middle; width: 100%; }
   .bar { height: 9px; background: #1a4a9f; display: inline-block; width: 90px; vertical-align: middle; }
   .bar-fill { height: 100%; display: block; }
 
@@ -73,8 +76,8 @@
     display: flex;
     justify-content: space-between;
     margin-top: 8px;
-    color: #ffffff;
-    font-size: 12px;
+    color: rgba(255,255,255,0.6);
+    font-size: 14px;
   }
 </style>
 </head>
@@ -82,15 +85,20 @@
 
 <div class="container">
 <div class="header">
-  <span>GENSYN CHAIN MONITOR</span>
+  <div class="nav">
+    <button class="nav-btn active" data-page="chain" onclick="showPage('chain')">Delphi</button>
+    <button class="nav-btn" data-page="token" onclick="showPage('token')">$AI Token</button>
+  </div>
   <span class="header-right" id="ts">—</span>
 </div>
 
 <div class="grid3">
   <div class="panel" id="p-chain">  <div class="panel-title">Chain</div>      <span class="dim">loading…</span></div>
-  <div class="panel" id="p-rpc">    <div class="panel-title">RPC Health</div> <span class="dim">loading…</span></div>
+  <div class="panel" id="p-rpc">    <div class="panel-title">RPC</div> <span class="dim">loading…</span></div>
   <div class="panel" id="p-liquidity"> <div class="panel-title">Funding</div>  <span class="dim">loading…</span></div>
 </div>
+
+<div id="page-chain" class="page active">
 <div class="grid2">
   <div class="panel" id="p-delphi"> <div class="panel-title">Delphi Markets</div> <span class="dim">loading…</span></div>
   <div class="panel" id="p-trades"> <div class="panel-title">Recent Trades</div>  <span class="dim">loading…</span></div>
@@ -103,17 +111,22 @@
   <div class="panel" id="p-trades-per-hour"><div class="panel-title">Weekly Trading Volume</div><span class="dim">loading…</span></div>
 </div>
 <div class="grid2">
-  <div class="panel" id="p-pool">   <div class="panel-title">ETH / USDC.e Pool</div> <span class="dim">loading…</span></div>
-  <div class="panel" id="p-morpho"> <div class="panel-title">Morpho Vault</div>       <span class="dim">loading…</span></div>
+  <div class="panel" id="p-pool">       <div class="panel-title">ETH / USDC.e Pool</div> <span class="dim">loading…</span></div>
+  <div class="panel" id="p-top-traders"><div class="panel-title">Top Traders</div>        <span class="dim">loading…</span></div>
+</div>
+</div><!-- /page-chain -->
+
+<div id="page-token" class="page">
+<div class="grid3">
+  <div class="panel" id="p-morpho"><div class="panel-title">Morpho Vault</div><span class="dim">loading…</span></div>
+  <div class="panel" id="p-token-market"><div class="panel-title">Market</div><span class="dim">loading…</span></div>
+  <div class="panel" id="p-token-price"><div class="panel-title">$AI</div><span class="dim">loading…</span></div>
 </div>
 <div class="grid2">
-  <div class="panel" id="p-blocks"><div class="panel-title">Recent Blocks</div><span class="dim">loading…</span></div>
-  <div class="panel" id="p-top-traders"><div class="panel-title">Top Traders</div><span class="dim">loading…</span></div>
+  <div class="panel" id="p-token-chart"><div class="panel-title">$AI / USD (history)</div><span class="dim">loading…</span></div>
+  <div class="panel" id="p-token-chart-1d"><div class="panel-title">$AI / USD (24h)</div><span class="dim">loading…</span></div>
 </div>
-<div class="panel" id="p-usdc">
-  <div class="panel-title">Recent USDC.e Transfers</div>
-  <span class="dim">loading…</span>
-</div>
+</div><!-- /page-token -->
 
 <div class="footer">
   <span>gensyn-mainnet.explorer.alchemy.com · Goldsky/delphi-mainnet · Cloudflare D1</span>
@@ -123,7 +136,19 @@
 
 <script>
 const G = '#55cc55', R = '#cc5566', T = '#ddcc44', D = '#ffffff', W = '#ffffff';
+let _holdingPct = null;
 
+
+const PT = 'America/Los_Angeles';
+function fmtPT(date, opts) {
+  return new Date(date).toLocaleString('en-US', { timeZone: PT, ...opts });
+}
+function ptHour(ts) {
+  return fmtPT(ts, { hour: 'numeric', hour12: true });
+}
+function ptDate(ts) {
+  return fmtPT(ts, { month: 'numeric', day: 'numeric' });
+}
 
 function n(v, fb = '—') {
   if (v == null) return fb;
@@ -133,9 +158,9 @@ function usd(v, dec = 2) {
   if (v == null) return '—';
   return '$' + Number(v).toLocaleString('en', { minimumFractionDigits: dec, maximumFractionDigits: dec });
 }
-function bar(pct, color, width = 90) {
+function bar(pct, color, colspan = 1) {
   const w = Math.max(0, Math.min(100, pct)).toFixed(1);
-  return `<td class="bar-wrap"><div class="bar" style="width:${width}px"><div class="bar-fill" style="width:${w}%;background:${color}"></div></div></td>`;
+  return `<td class="bar-wrap"${colspan > 1 ? ` colspan="${colspan}"` : ''}><div class="bar" style="width:100%"><div class="bar-fill" style="width:${w}%;background:${color}"></div></div></td>`;
 }
 function row(label, val, color, note = '') {
   return `<tr>
@@ -171,11 +196,16 @@ function renderChain(d) {
     ${row('Latest Block',    n(b.height),             W)}
     ${row('Block Age',       age,                     W)}
     ${row('Txs in Block',    n(b.transactions_count), W)}
-    ${row('Gas Used',        n(b.gas_used),           W)}
+    ${row('Gas Price',       d.rpc?.gas_price != null ? (d.rpc.gas_price / 1e9).toFixed(4) + ' gwei' : '—', W)}
     ${row('Block Util %',    pct.toFixed(4) + '%',    W)}
-    ${row('Txs Today',       n(s.transactions_today), W)}
-    ${row('Total Txs',       n(s.total_transactions), W)}
-    ${row('Total Addresses', n(s.total_addresses),    W)}
+    <tr><td colspan="2" style="padding-bottom:4px">
+      <div class="bar" style="width:100%"><div class="bar-fill" style="width:${(Math.log1p(Math.min(pct,100)) / Math.log1p(100) * 100).toFixed(1)}%;background:${pct > 90 ? R : pct > 60 ? T : G}"></div></div>
+    </td></tr>
+    <tr>
+      <td style="color:${D}">Total Addresses</td>
+      <td class="r bold" style="color:${W}">${n(s.total_addresses)}</td>
+      ${d.chain_snap ? `<td class="note">${pct_change(s.total_addresses, d.chain_snap.total_addresses)}</td>` : ''}
+    </tr>
   </table>`;
 }
 
@@ -200,10 +230,9 @@ function renderRpc(d) {
     <tr><td colspan="2" style="padding-bottom:4px">
       <div class="bar" style="width:100%"><div class="bar-fill" style="width:${Math.min(lat/10,100).toFixed(1)}%;background:${latColor}"></div></div>
     </td></tr>
-    ${row('RPC Block',  n(r.block),                          W)}
-    ${row('Block Lag',  lag != null ? lag + ' blks' : '—',  lagColor)}
-    ${row('Peers',      r.peers != null ? r.peers : '—',    peerColor)}
-    ${row('Gas Price',  r.gas_price != null ? (r.gas_price / 1e9).toFixed(4) + ' gwei' : '—', W)}
+    ${row('Block Lag',    lag != null ? lag + ' blks' : '—',  lagColor)}
+    ${row('Peers',        r.peers != null ? r.peers : '—',   peerColor)}
+    ${r.node_version ? row('Node', r.node_version.split('/')[0], D) : ''}
   </table>`;
 }
 
@@ -213,39 +242,40 @@ function renderDelphi(d) {
   const bv = m.buy_vol || 0, sv = m.sell_vol || 0, rv = m.redm_vol || 0;
   const total = (bv + sv + rv) || 1;
   const $m = v => usd(v / 1e6);
-  return `<table>
+  return `<table style="width:100%">
     <tr><th>Activity</th><th class="r">USDC.e</th><th class="r" style="padding-left:8px">N</th><th></th></tr>
     <tr>
       <td class="bold" style="color:${G}">BUYS</td>
       <td class="r bold" style="color:${W}">${$m(bv)}</td>
       <td class="r" style="color:${W};padding-left:8px">${m.buy_n || 0}</td>
-      ${bar(bv / total * 100, G)}
+      ${bar(bv / total * 100, G, 2)}
     </tr>
     <tr>
       <td class="bold" style="color:${R}">SELLS</td>
       <td class="r bold" style="color:${W}">${$m(sv)}</td>
       <td class="r" style="color:${W};padding-left:8px">${m.sell_n || 0}</td>
-      ${bar(sv / total * 100, R)}
+      ${bar(sv / total * 100, R, 2)}
     </tr>
     <tr>
       <td class="bold" style="color:${T}">REDEMPTIONS</td>
       <td class="r bold" style="color:${W}">${$m(rv)}</td>
       <td class="r" style="color:${W};padding-left:8px">${m.redm_n || 0}</td>
-      ${bar(rv / total * 100, T)}
+      ${bar(rv / total * 100, T, 2)}
     </tr>
-    <tr><td colspan="4"><hr class="sep"></td></tr>
-    <tr><th></th><th class="r">24h</th><th class="r" style="padding-left:12px">24h %chg</th><th class="r" style="padding-left:12px">All time</th></tr>
+    <tr><td colspan="5"><hr class="sep"></td></tr>
+    <tr><th></th><th class="r">24h</th><th class="r" style="min-width:52px">24h%</th><th class="r">7d%</th><th class="r" style="padding-left:8px">All time</th></tr>
     <tr>
       <td style="color:${W}">Active Markets</td>
-      <td class="r bold" style="color:${W};padding-left:12px">${m.markets_live ?? '—'}</td>
-      <td class="r" style="padding-left:12px">${pct_change(m.markets_live, m.markets_live_prev)}</td>
-      <td class="r" style="color:${W};padding-left:12px">${m.markets ?? '—'}</td>
+      <td class="r bold" style="color:${W};padding-left:8px">${m.markets_live ?? '—'}</td>
+      <td class="r">${pct_change(m.markets_live, m.markets_live_prev)}</td>
+      <td class="r">${pct_change(m.markets_live, m.markets_7d_ago)}</td>
+      <td class="r" style="color:${W};padding-left:8px">${m.markets ?? '—'}</td>
     </tr>
-    <tr><td style="color:${W}">Volume</td>      <td class="r bold" style="color:${W}">${$m((m.buy_vol_24h || 0) + (m.sell_vol_24h || 0))}</td> <td class="r" style="padding-left:12px">${pct_change((m.buy_vol_24h || 0) + (m.sell_vol_24h || 0), m.vol_prev24h)}</td>         <td class="r" style="color:${W};padding-left:12px">${$m(bv + sv)}</td></tr>
-    <tr><td style="color:${W}">Trades</td>      <td class="r bold" style="color:${W}">${m.trades_24h || 0}</td>                                   <td class="r" style="padding-left:12px">${pct_change(m.trades_24h, m.trades_prev24h)}</td>                                          <td class="r" style="color:${W};padding-left:12px">${(m.buy_n || 0) + (m.sell_n || 0)}</td></tr>
-    <tr><td style="color:${W}">Traders</td>     <td class="r bold" style="color:${W}">${m.traders_24h || 0}</td>      <td class="r" style="padding-left:12px">${pct_change(m.traders_24h, m.traders_prev24h)}</td>                                                           <td class="r" style="color:${W};padding-left:12px">${m.traders || 0}</td></tr>
-    <tr><td style="color:${W}">Resolutions</td> <td class="r bold" style="color:${W}">${m.resolutions_24h || 0}</td>  <td class="r" style="padding-left:12px">${pct_change(m.resolutions_24h, m.resolutions_prev24h)}</td>                                                   <td class="r" style="color:${W};padding-left:12px">${m.resolutions || 0}</td></tr>
-    <tr><td style="color:${W}">Fees</td>        <td class="r bold" style="color:${W}">${$m(m.fees_24h || 0)}</td>     <td class="r" style="padding-left:12px">${pct_change(m.fees_24h, m.fees_prev24h)}</td>                                                                  <td class="r" style="color:${W};padding-left:12px">${$m(m.total_fees || 0)}</td></tr>
+    <tr><td style="color:${W}">Volume</td>      <td class="r bold" style="color:${W}">${$m((m.buy_vol_24h || 0) + (m.sell_vol_24h || 0))}</td> <td class="r">${pct_change((m.buy_vol_24h || 0) + (m.sell_vol_24h || 0), m.vol_prev24h)}</td> <td class="r">${pct_change((m.buy_vol_24h||0)+(m.sell_vol_24h||0), m.vol_7d_ago)}</td>       <td class="r" style="color:${W};padding-left:8px">${$m(bv + sv)}</td></tr>
+    <tr><td style="color:${W}">Trades</td>      <td class="r bold" style="color:${W}">${m.trades_24h || 0}</td>       <td class="r">${pct_change(m.trades_24h, m.trades_prev24h)}</td>         <td class="r">${pct_change(m.trades_24h, m.trades_7d_ago)}</td>         <td class="r" style="color:${W};padding-left:8px">${(m.buy_n || 0) + (m.sell_n || 0)}</td></tr>
+    <tr><td style="color:${W}">Traders</td>     <td class="r bold" style="color:${W}">${m.traders_24h || 0}</td>      <td class="r">${pct_change(m.traders_24h, m.traders_prev24h)}</td>       <td class="r">${pct_change(m.traders_24h, m.traders_7d_ago)}</td>       <td class="r" style="color:${W};padding-left:8px">${m.traders || 0}</td></tr>
+    <tr><td style="color:${W}">Resolutions</td> <td class="r bold" style="color:${W}">${m.resolutions_24h || 0}</td>  <td class="r">${pct_change(m.resolutions_24h, m.resolutions_prev24h)}</td> <td class="r">${pct_change(m.resolutions_24h, m.resolutions_7d_ago)}</td> <td class="r" style="color:${W};padding-left:8px">${m.resolutions || 0}</td></tr>
+    <tr><td style="color:${W}">Fees</td>        <td class="r bold" style="color:${W}">${$m(m.fees_24h || 0)}</td>     <td class="r">${pct_change(m.fees_24h, m.fees_prev24h)}</td>             <td class="r">${pct_change(m.fees_24h, m.fees_7d_ago)}</td>             <td class="r" style="color:${W};padding-left:8px">${$m(m.total_fees || 0)}</td></tr>
   </table>`;
 }
 
@@ -307,7 +337,7 @@ function renderBlocks(d) {
       <td class="r" style="color:${W};padding-left:12px">${n(b.gas_used)}</td>
       <td class="r" style="color:${T};padding-left:12px">${pct.toFixed(3)}%</td>
       <td class="r" style="color:${D};padding-left:12px">${n(b.size)}</td>
-      ${bar(pct * 100, G, 100)}
+      ${bar(pct * 100, G)}
     </tr>`;
   }).join('');
   return `<table>
@@ -330,7 +360,6 @@ function renderLiquidity(d) {
   const vol    = ((m.buy_vol_24h || 0) + (m.sell_vol_24h || 0)) / 1e6;
   const velocity = locked > 0 ? (vol / locked).toFixed(2) + 'x' : '—';
   return `<table>
-    <tr><th>Source</th><th class="r">Value</th></tr>
     ${row('Delphi TVL',       usd(locked),  G)}
     ${row('Delphi Velocity',  velocity,     W)}
     ${row('Buy Burn Vault',  usd(r.bbv_usdc),  W)}
@@ -376,7 +405,7 @@ function renderUsdce(d) {
       <td style="color:${D};padding-left:10px">${from}</td>
       <td style="color:${D};padding-left:10px">${to}</td>
       <td class="r bold" style="color:${T};padding-left:10px">${amount} USDC.e</td>
-      <td class="r" style="color:${D};padding-left:10px;font-size:12px">${txHash}</td>
+      <td class="r" style="color:${D};padding-left:10px">${txHash}</td>
     </tr>`;
   }).join('');
   return `<table>${hdr}${rows}</table>`;
@@ -430,7 +459,7 @@ function renderTradesPerHour(d) {
   const grid = [0.5, 1].map(f => {
     const y = (pT + ph - f * ph).toFixed(1);
     return `<line x1="${pL}" y1="${y}" x2="${pL + pw}" y2="${y}" stroke="#ffffff" stroke-opacity="0.15" stroke-dasharray="3,3"/>
-            <text x="${pL - 3}" y="${(+y + 4).toFixed(1)}" fill="#ffffff" font-size="14" text-anchor="end" font-family="Courier New">${Math.round(f * maxCount)}</text>`;
+            <text x="${pL - 3}" y="${(+y + 4).toFixed(1)}" fill="#ffffff" font-size="14" text-anchor="end" font-family="Menlo, Monaco, Consolas, Courier New, monospace">${Math.round(f * maxCount)}</text>`;
   }).join('');
 
   // x-axis: labels every 1 day (4 buckets)
@@ -440,7 +469,7 @@ function renderTradesPerHour(d) {
     const daysAgo = Math.round((BUCKETS - bi) * 6 / 24);
     const label = bi === BUCKETS ? 'now' : daysAgo + 'd ago';
     const anchor = bi === BUCKETS ? 'end' : bi === 0 ? 'start' : 'middle';
-    return `<text x="${x}" y="${H - 4}" fill="#ffffff" font-size="14" text-anchor="${anchor}" font-family="Courier New">${label}</text>`;
+    return `<text x="${x}" y="${H - 4}" fill="#ffffff" font-size="14" text-anchor="${anchor}" font-family="Menlo, Monaco, Consolas, Courier New, monospace">${label}</text>`;
   }).join('');
 
   const axes = `<line x1="${pL}" y1="${pT}" x2="${pL}" y2="${pT + ph}" stroke="#ffffff" stroke-width="1"/>
@@ -480,7 +509,7 @@ function renderHistogram(d) {
     const y = (pT + ph - f * ph).toFixed(1);
     const label = Math.round(f * maxCount);
     return `<line x1="${pL}" y1="${y}" x2="${pL + pw}" y2="${y}" stroke="#ffffff" stroke-opacity="0.15" stroke-dasharray="3,3"/>
-            <text x="${pL - 3}" y="${(+y + 4).toFixed(1)}" fill="#ffffff" font-size="14" text-anchor="end" font-family="Courier New">${label}</text>`;
+            <text x="${pL - 3}" y="${(+y + 4).toFixed(1)}" fill="#ffffff" font-size="14" text-anchor="end" font-family="Menlo, Monaco, Consolas, Courier New, monospace">${label}</text>`;
   }).join('');
 
   const xLabels = [0, 0.25, 0.5, 0.75, 1].map(f => {
@@ -493,7 +522,7 @@ function renderHistogram(d) {
       label = val >= 10 ? val.toFixed(0) : val.toFixed(2);
     }
     const anchor = f === 1 ? 'end' : f === 0 ? 'start' : 'middle';
-    return `<text x="${x}" y="${H - 4}" fill="#ffffff" font-size="14" text-anchor="${anchor}" font-family="Courier New">${label}</text>`;
+    return `<text x="${x}" y="${H - 4}" fill="#ffffff" font-size="14" text-anchor="${anchor}" font-family="Menlo, Monaco, Consolas, Courier New, monospace">${label}</text>`;
   }).join('');
 
   const axes = `<line x1="${pL}" y1="${pT}" x2="${pL}" y2="${pT + ph}" stroke="#ffffff" stroke-width="1"/>
@@ -505,6 +534,167 @@ function renderHistogram(d) {
   <div style="text-align:center;font-size:14px;color:${T};margin-top:4px">Trade Size (USDC.e) · n=${amounts.length} · 30 bins</div>`;
 }
 
+// ── Page navigation ───────────────────────────────────────────────────────
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  document.querySelector(`.nav-btn[data-page="${name}"]`).classList.add('active');
+}
+
+// ── $AI Token ─────────────────────────────────────────────────────────────
+function fmtPct(v) {
+  if (v == null) return '<span style="color:rgba(255,255,255,0.4)">—</span>';
+  const sign = v >= 0 ? '+' : '';
+  const bg = v > 0 ? G : v < 0 ? R : 'transparent';
+  const color = v > 0 ? '#000000' : v < 0 ? '#ffffff' : D;
+  return `<span style="background:${bg};color:${color};font-weight:bold;padding:1px 5px">${sign}${v.toFixed(2)}%</span>`;
+}
+function fmtPrice(v) {
+  if (v == null) return '—';
+  if (v >= 1)    return '$' + v.toLocaleString('en', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  return '$' + v.toPrecision(4);
+}
+function fmtLarge(v) {
+  if (v == null) return '—';
+  if (v >= 1e9) return '$' + (v / 1e9).toFixed(2) + 'B';
+  if (v >= 1e6) return '$' + (v / 1e6).toFixed(2) + 'M';
+  return '$' + v.toLocaleString('en');
+}
+function fmtSupply(v) {
+  if (v == null) return '—';
+  if (v >= 1e9) return (v / 1e9).toFixed(2) + 'B';
+  if (v >= 1e6) return (v / 1e6).toFixed(2) + 'M';
+  return v.toLocaleString('en');
+}
+
+function fmtEth(v) {
+  if (v == null) return '—';
+  if (v >= 0.001) return 'Ξ' + v.toPrecision(3);
+  return 'Ξ' + v.toPrecision(2);
+}
+
+function renderTokenPrice(t) {
+  return `<table>
+    <tr><th></th><th class="r">ETH</th><th class="r">USD</th></tr>
+    <tr><td style="color:${D}">Price</td><td class="r bold">${fmtEth(t.price_eth)}</td><td class="r bold">${fmtPrice(t.price)}</td></tr>
+    <tr><td style="color:${D}">1h</td><td class="r">${fmtPct(t.price_change_1h_eth)}</td><td class="r">${fmtPct(t.price_change_1h)}</td></tr>
+    <tr><td style="color:${D}">24h</td><td class="r">${fmtPct(t.price_change_24h_eth)}</td><td class="r">${fmtPct(t.price_change_24h)}</td></tr>
+    <tr><td style="color:${D}">7d</td><td class="r">${fmtPct(t.price_change_7d_eth)}</td><td class="r">${fmtPct(t.price_change_7d)}</td></tr>
+    <tr><td style="color:${D}">30d</td><td class="r">${fmtPct(t.price_change_30d_eth)}</td><td class="r">${fmtPct(t.price_change_30d)}</td></tr>
+  </table>`;
+}
+
+function renderTokenMarket(t) {
+  const circ_pct = t.circulating && t.total_supply ? (t.circulating / t.total_supply * 100).toFixed(1) + '%' : '—';
+  return `<table>
+    <tr><td style="color:${D}">Market Cap</td><td class="r bold" style="color:${W}">${fmtLarge(t.market_cap)}</td></tr>
+    <tr><td style="color:${D}">FDV</td><td class="r bold" style="color:${W}">${fmtLarge(t.fdv)}</td></tr>
+    <tr><td style="color:${D}">Volume 24h</td><td class="r bold" style="color:${T}">${fmtLarge(t.volume_24h)}</td></tr>
+    <tr><td colspan="2"><hr class="sep"></td></tr>
+    <tr><td style="color:${D}">Circ %</td><td class="r bold" style="color:${W}">${circ_pct}</td></tr>
+    ${_holdingPct != null ? `<tr><td style="color:${D}">% sale held</td><td class="r bold" style="color:${T}">${_holdingPct.toFixed(1)}%</td></tr>` : ''}
+  </table>`;
+}
+
+function renderCandleChart(ohlc, labelFn) {
+  if (!ohlc || !ohlc.length) return '<span class="dim">No data</span>';
+  const SVG_W = 800, SVG_H = 540;
+  const pL = 64, pR = 12, pT = 16, pB = 28;
+  const gap = 14;
+  const pw = SVG_W - pL - pR;
+  const usable = SVG_H - pT - pB - gap;
+  const candlePh = Math.round(usable * 0.74);
+  const volPh    = usable - candlePh;
+  const candleTop = pT;
+  const volTop    = pT + candlePh + gap;
+
+  const minV = Math.min(...ohlc.map(c => c[3]));
+  const maxV = Math.max(...ohlc.map(c => c[2]));
+  const range = maxV - minV || 1;
+  const maxVol = Math.max(...ohlc.map(c => c[5] || 0)) || 1;
+  const n = ohlc.length;
+  const cw = Math.max(2, Math.floor(pw / n) - 1);
+  const cx = i => pL + (i + 0.5) * (pw / n);
+  const yP = v => candleTop + candlePh - ((v - minV) / range) * candlePh;
+  const yV = v => volTop + volPh - (v / maxVol) * volPh;
+
+  const candles = ohlc.map(([ts, o, h, l, c, vol], i) => {
+    const col = c >= o ? G : R;
+    const x0 = cx(i);
+    const bTop = Math.min(yP(o), yP(c)).toFixed(1);
+    const bH   = Math.max(1, Math.abs(yP(c) - yP(o))).toFixed(1);
+    const vH   = Math.max(1, ((vol || 0) / maxVol) * volPh).toFixed(1);
+    const vY   = (volTop + volPh - +vH).toFixed(1);
+    return `<line x1="${x0.toFixed(1)}" y1="${yP(h).toFixed(1)}" x2="${x0.toFixed(1)}" y2="${yP(l).toFixed(1)}" stroke="${col}" stroke-width="1"/>
+            <rect x="${(x0-cw/2).toFixed(1)}" y="${bTop}" width="${cw}" height="${bH}" fill="${col}"/>
+            <rect x="${(x0-cw/2).toFixed(1)}" y="${vY}" width="${cw}" height="${vH}" fill="${col}" opacity="0.7"/>`;
+  }).join('');
+
+  const priceGrid = [0, 0.25, 0.5, 0.75, 1].map(f => {
+    const yy = (candleTop + candlePh - f * candlePh).toFixed(1);
+    return `<line x1="${pL}" y1="${yy}" x2="${pL+pw}" y2="${yy}" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+            <text x="${pL-4}" y="${(+yy+4).toFixed(1)}" fill="rgba(255,255,255,0.6)" font-size="12" text-anchor="end" font-family="Menlo, Monaco, Consolas, Courier New, monospace">$${(minV+f*range).toPrecision(2)}</text>`;
+  }).join('');
+
+  const volGrid = [0, 0.5, 1].map(f => {
+    const yy = (volTop + volPh - f * volPh).toFixed(1);
+    const label = f === 0 ? '' : '$' + (maxVol * f / 1e6).toFixed(0) + 'M';
+    return `<line x1="${pL}" y1="${yy}" x2="${pL+pw}" y2="${yy}" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+            <text x="${pL-4}" y="${(+yy+4).toFixed(1)}" fill="rgba(255,255,255,0.4)" font-size="11" text-anchor="end" font-family="Menlo, Monaco, Consolas, Courier New, monospace">${label}</text>`;
+  }).join('');
+
+  const xLabels = [0, Math.floor(n/4), Math.floor(n/2), Math.floor(3*n/4), n-1].map(i =>
+    `<text x="${cx(i).toFixed(1)}" y="${SVG_H-4}" fill="rgba(255,255,255,0.6)" font-size="12" text-anchor="middle" font-family="Menlo, Monaco, Consolas, Courier New, monospace">${labelFn(ohlc[i][0])}</text>`
+  ).join('');
+
+  return `<svg width="100%" viewBox="0 0 ${SVG_W} ${SVG_H}" style="display:block">
+    ${priceGrid}${volGrid}${candles}
+    <line x1="${pL}" y1="${candleTop}" x2="${pL}" y2="${candleTop+candlePh}" stroke="rgba(255,255,255,0.4)" stroke-width="1"/>
+    <line x1="${pL}" y1="${candleTop+candlePh}" x2="${pL+pw}" y2="${candleTop+candlePh}" stroke="rgba(255,255,255,0.4)" stroke-width="1"/>
+    <line x1="${pL}" y1="${volTop}" x2="${pL}" y2="${volTop+volPh}" stroke="rgba(255,255,255,0.25)" stroke-width="1"/>
+    <line x1="${pL}" y1="${volTop+volPh}" x2="${pL+pw}" y2="${volTop+volPh}" stroke="rgba(255,255,255,0.25)" stroke-width="1"/>
+    ${xLabels}
+  </svg>`;
+}
+
+// ── Gensyn Airdrop ────────────────────────────────────────────────────────
+function renderAirdrop(t) {
+  const a = t.airdrop;
+  if (!a) return '<span class="dim">No data</span>';
+  const fmtAI = v => v != null ? fmtSupply(v) + ' $AI' : '—';
+  const claimPct = a.total > 0 ? a.claimed / a.total * 100 : 0;
+  const claimPctStr = a.total > 0 ? claimPct.toFixed(1) + '%' : '—';
+  const remPct = a.total > 0 ? (100 - claimPct).toFixed(1) + '%' : '—';
+  return `<table>
+    ${row('Total Allocated', fmtAI(a.total),    W)}
+    ${row('Claimed',         fmtAI(a.claimed),  G, claimPctStr)}
+    <tr><td colspan="3" style="padding:2px 0 4px">
+      <div class="bar" style="width:100%"><div class="bar-fill" style="width:${claimPct.toFixed(1)}%;background:${G}"></div></div>
+    </td></tr>
+    ${row('Remaining',       fmtAI(a.remaining), T, remPct)}
+    <tr><td colspan="3"><hr class="sep"></td></tr>
+    ${row('Claimants',  n(a.claimants),  W)}
+    ${row('Claim Txs',  n(a.claim_count), W)}
+  </table>`;
+}
+
+async function refreshToken() {
+  try {
+    const r = await fetch('/api/token?t=' + Date.now());
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const t = await r.json();
+    setPanel('p-token-price',    renderTokenPrice(t));
+    setPanel('p-token-market',   renderTokenMarket(t));
+    setPanel('p-token-chart-1d', renderCandleChart(t.ohlc_24h, ptHour));
+    setPanel('p-token-chart',    renderCandleChart(t.ohlc_30d, ptHour));
+    if (t.airdrop?.held_pct != null) _holdingPct = t.airdrop.held_pct;
+  } catch (e) {
+    ['p-token-price','p-token-market','p-token-chart-1d','p-token-chart']
+      .forEach(id => setPanel(id, `<span style="color:${R}">${e.message}</span>`));
+  }
+}
+
 // ── refresh loop ──────────────────────────────────────────────────────────
 async function refresh() {
   try {
@@ -512,8 +702,7 @@ async function refresh() {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const d = await r.json();
 
-    document.getElementById('ts').textContent =
-      'Last updated: ' + new Date().toUTCString().replace(' GMT', ' UTC');
+    tickClock();
     document.getElementById('status').textContent = '● ONLINE';
     document.getElementById('status').style.color = G;
 
@@ -524,8 +713,6 @@ async function refresh() {
     setPanel('p-trades',   renderTrades(d));
     setPanel('p-pool',     renderPool(d));
     setPanel('p-morpho',   renderMorpho(d));
-    setPanel('p-blocks',    renderBlocks(d));
-    setPanel('p-usdc',      renderUsdce(d));
     setPanel('p-trades-per-hour', renderTradesPerHour(d));
     setPanel('p-histogram',       renderHistogram(d));
     setPanel('p-top-traders',  renderTopTraders(d));
@@ -535,8 +722,22 @@ async function refresh() {
   }
 }
 
+function tickClock() {
+  const now = new Date();
+  const pt  = fmtPT(now, { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true });
+  const uh  = now.getUTCHours().toString().padStart(2,'0');
+  const um  = now.getUTCMinutes().toString().padStart(2,'0');
+  const us  = now.getUTCSeconds().toString().padStart(2,'0');
+  document.getElementById('ts').textContent = pt + ' PT · ' + uh + ':' + um + ':' + us + ' UTC';
+}
+tickClock();
+setInterval(tickClock, 1000);
+
 refresh();
 setInterval(refresh, 2000);
+
+refreshToken();
+setInterval(refreshToken, 60000);
 </script>
 </body>
 </html>

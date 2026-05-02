@@ -1,8 +1,8 @@
 // Cloudflare Worker — Gensyn Chain Monitor
 // Serves the web dashboard (static assets) + /api/data + cron Delphi sync
 
-const BLOCKS_API  = 'https://gensyn-mainnet.explorer.alchemy.com/api/v2/main-page/blocks';
-const STATS_API   = 'https://gensyn-mainnet.explorer.alchemy.com/api/v2/stats';
+const BLOCKS_API    = 'https://gensyn-mainnet.explorer.alchemy.com/api/v2/main-page/blocks';
+const STATS_API     = 'https://gensyn-mainnet.explorer.alchemy.com/api/v2/stats';
 const GOLDSKY_URL = 'https://api.goldsky.com/api/public/project_cmnoqdag1obop01z3efnu8ssq/subgraphs/delphi-mainnet/1.0.0/gn';
 const PUBLIC_RPC  = 'https://gensyn-mainnet.g.alchemy.com/public';
 
@@ -13,6 +13,7 @@ const OP_PORTAL    = '0x0280eb8c305e414d56bf2e396859c27415ba54fc';
 const AI_TOKEN     = '0x4e742319f6b0fec4afa504fc8ed3ceab0fb751a2';
 const POOL         = '0xf3f77fb85a74f49a3dcb082347d7fefa8aba596f'; // WETH/USDC.e 0.3%
 const MORPHO_VAULT = '0x1b6C76fF584FBee80e4BBd7a4eB060c6C8Dd3B9F';
+const AIRDROP      = '0x8c84E3E575eA1383FFc855C21671F70577D39007';
 
 // ── helpers ───────────────────────────────────────────────────────────────
 
@@ -45,14 +46,22 @@ async function fetchRpc(env) {
   ];
 
   const t0 = Date.now();
-  const r  = await fetch(rpcUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'User-Agent': 'chain-monitor/1.0' },
-    body: JSON.stringify(batch),
-  });
+  const [r, versionRes] = await Promise.all([
+    fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'User-Agent': 'chain-monitor/1.0' },
+      body: JSON.stringify(batch),
+    }),
+    fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'User-Agent': 'chain-monitor/1.0' },
+      body: JSON.stringify({ jsonrpc: '2.0', method: 'web3_clientVersion', params: [], id: 1 }),
+    }).then(r => r.json()).catch(() => null),
+  ]);
   const latency = Date.now() - t0;
   const results = await r.json();
   const byId    = Object.fromEntries(results.map(x => [x.id, x.result]));
+  const node_version = versionRes?.result ?? null;
 
   // sqrtPriceX96 is uint160 — use BigInt to avoid float precision loss
   let pool_price = null;
@@ -65,11 +74,12 @@ async function fetchRpc(env) {
   }
 
   return {
-    latency_ms:  latency,
-    block:       hexN(byId[1]),
-    syncing:     byId[2],
-    peers:       hexN(byId[3]),
-    gas_price:   hexN(byId[4]),
+    latency_ms:    latency,
+    block:         hexN(byId[1]),
+    syncing:       byId[2],
+    peers:         hexN(byId[3]),
+    gas_price:     hexN(byId[4]),
+    node_version,
     usdc_e:      byId[5]  ? hexN(byId[5])  / 1e6  : null,
     bbv_usdc:    byId[6]  ? hexN(byId[6])  / 1e6  : null,
     ai_supply:   byId[7]  ? hexN(byId[7])  / 1e18 : null,
@@ -108,6 +118,7 @@ async function ensureSchema(db) {
     db.prepare(`CREATE TABLE IF NOT EXISTS liquidations (id TEXT PRIMARY KEY, block_number INTEGER, timestamp_ INTEGER, tx_hash TEXT, market_proxy TEXT, liquidator TEXT, outcome_indices TEXT, shares_in TEXT, total_tokens_out INTEGER)`),
     db.prepare(`CREATE TABLE IF NOT EXISTS resolutions (id TEXT PRIMARY KEY, block_number INTEGER, timestamp_ INTEGER, tx_hash TEXT, market_proxy TEXT, winning_outcome_idx INTEGER, market_creator_reward INTEGER, refund INTEGER, market_creator_trading_fees INTEGER)`),
     db.prepare(`CREATE TABLE IF NOT EXISTS sync_log (table_name TEXT PRIMARY KEY, last_block INTEGER DEFAULT 0, last_synced TEXT)`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS chain_snapshots (ts INTEGER PRIMARY KEY, txs_today INTEGER, total_addresses INTEGER)`),
     db.prepare(`INSERT OR IGNORE INTO sync_log(table_name, last_block) VALUES ('buys', 0)`),
     db.prepare(`INSERT OR IGNORE INTO sync_log(table_name, last_block) VALUES ('sells', 0)`),
     db.prepare(`INSERT OR IGNORE INTO sync_log(table_name, last_block) VALUES ('redemptions', 0)`),
@@ -116,8 +127,16 @@ async function ensureSchema(db) {
   ]);
 }
 
+async function fetchChainSnapshot(db) {
+  const now = Math.floor(Date.now() / 1000);
+  const row = await db.prepare(
+    `SELECT txs_today, total_addresses FROM chain_snapshots WHERE ts <= ? ORDER BY ts DESC LIMIT 1`
+  ).bind(now - 82800).first(); // ~23h ago, to get closest prior snapshot
+  return row || null;
+}
+
 async function fetchDelphiStats(db) {
-  const [r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15, r16, r17, r18, r19, r20, r21, r22, r23, r24, r25, r26, r27, r28, r29, r30] = await db.batch([
+  const [r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15, r16, r17, r18, r19, r20, r21, r22, r23, r24, r25, r26, r27, r28, r29, r30, r31, r32, r33, r34, r35, r36, r37, r38, r39, r40, r41] = await db.batch([
     db.prepare('SELECT COALESCE(SUM(tokens_in),0)  AS v FROM buys'),
     db.prepare('SELECT COALESCE(SUM(tokens_out),0) AS v FROM sells'),
     db.prepare('SELECT COALESCE(SUM(tokens_out),0) AS v FROM redemptions'),
@@ -160,6 +179,17 @@ async function fetchDelphiStats(db) {
     db.prepare(`SELECT COUNT(*) AS v FROM (SELECT id FROM buys WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 86400 UNION ALL SELECT id FROM sells WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 86400)`),
     db.prepare(`SELECT COUNT(*) AS v FROM (SELECT id FROM buys WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 172800 AND timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 86400 UNION ALL SELECT id FROM sells WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 172800 AND timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 86400)`),
     db.prepare(`SELECT CAST(timestamp_ / 21600 AS INTEGER) AS hr, COUNT(*) AS n FROM (SELECT timestamp_ FROM buys WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 604800 UNION ALL SELECT timestamp_ FROM sells WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 604800) GROUP BY hr ORDER BY hr ASC`),
+    db.prepare(`SELECT COALESCE(SUM(tokens_in), 0) AS v FROM buys WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 604800`),
+    db.prepare(`SELECT COALESCE(SUM(tokens_out), 0) AS v FROM sells WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 604800`),
+    db.prepare(`SELECT COALESCE(SUM(tokens_in), 0) AS v FROM buys WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 1209600 AND timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 604800`),
+    db.prepare(`SELECT COALESCE(SUM(tokens_out), 0) AS v FROM sells WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 1209600 AND timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 604800`),
+    db.prepare(`SELECT COALESCE(SUM(tokens_in),0) AS v FROM buys WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 691200 AND timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 604800`),
+    db.prepare(`SELECT COALESCE(SUM(tokens_out),0) AS v FROM sells WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 691200 AND timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 604800`),
+    db.prepare(`SELECT COUNT(*) AS v FROM (SELECT id FROM buys WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 691200 AND timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 604800 UNION ALL SELECT id FROM sells WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 691200 AND timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 604800)`),
+    db.prepare(`SELECT COUNT(DISTINCT a) AS v FROM (SELECT buyer AS a FROM buys WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 691200 AND timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 604800 UNION SELECT seller FROM sells WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 691200 AND timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 604800)`),
+    db.prepare(`SELECT COUNT(DISTINCT market_proxy) AS v FROM (SELECT market_proxy FROM buys WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 691200 AND timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 604800 UNION SELECT market_proxy FROM sells WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 691200 AND timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 604800)`),
+    db.prepare(`SELECT COUNT(*) AS v FROM resolutions WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 691200 AND timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 604800`),
+    db.prepare(`SELECT COALESCE(SUM(market_creator_reward + market_creator_trading_fees), 0) AS v FROM resolutions WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 691200 AND timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 604800`),
   ]);
   const v = (res) => res.results?.[0]?.v ?? 0;
   return {
@@ -188,6 +218,16 @@ async function fetchDelphiStats(db) {
     trades_24h:          v(r28),
     trades_prev24h:      v(r29),
     trades_per_hour:     r30.results || [],
+    vol_7d:              v(r31) + v(r32),
+    vol_prev7d:          v(r33) + v(r34),
+    trades_7d:           v(r35),
+    trades_prev7d:       v(r36),
+    vol_7d_ago:          v(r35) + v(r36),
+    trades_7d_ago:       v(r37),
+    traders_7d_ago:      v(r38),
+    markets_7d_ago:      v(r39),
+    resolutions_7d_ago:  v(r40),
+    fees_7d_ago:         v(r41),
     vol_prev24h:         v(r21) + v(r22),
     traders_prev24h:     v(r23),
     resolutions_prev24h: v(r24),
@@ -272,6 +312,19 @@ async function syncTable(db, tableName, entity, fields, makeStmt) {
 async function syncDelphi(env) {
   const db = env.DB;
   await ensureSchema(db);
+
+  // Store chain stats snapshot for daily % change calculations
+  try {
+    const s = await getJson(STATS_API);
+    if (s.transactions_today != null && s.total_addresses != null) {
+      const ts = Math.floor(Date.now() / 1000);
+      await db.prepare(`INSERT OR REPLACE INTO chain_snapshots (ts, txs_today, total_addresses) VALUES (?,?,?)`)
+        .bind(ts, s.transactions_today, s.total_addresses).run();
+      // Prune snapshots older than 48h
+      await db.prepare(`DELETE FROM chain_snapshots WHERE ts < ?`).bind(ts - 172800).run();
+    }
+  } catch (_) {}
+
   await syncTable(db, 'buys', 'gatewayBuys',
     'id block_number timestamp_ transactionHash_ marketProxy buyer outcomeIdx tokensIn sharesOut',
     (db, r) => db.prepare('INSERT OR IGNORE INTO buys VALUES (?,?,?,?,?,?,?,?,?)')
@@ -342,10 +395,224 @@ async function getUsdceData() {
   return _usdceCache;
 }
 
+// ── Gensyn airdrop claimed data (120s cache) ──────────────────────────────
+// Uses Merkl API for campaign total + on-chain balanceOf for remaining.
+// The AIRDROP address is the Merkl distributor; it serves multiple campaigns
+// so we use the campaign-specific `amount` from Merkl rather than summing
+// all outgoing Transfer events (which would include other campaigns).
+
+const MERKL_DB_ID = '9406623851706983076';
+
+let _airdropCache = { ts: 0, data: null };
+
+async function fetchAirdropData(env) {
+  if (Date.now() - _airdropCache.ts < 120_000 && _airdropCache.data) return _airdropCache.data;
+
+  const rpcUrl = env.RPC_URL || PUBLIC_RPC;
+  const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+  const fromTopic = '0x000000000000000000000000' + AIRDROP.slice(2).toLowerCase();
+
+  const [balRes, logsRes, merklRes] = await Promise.all([
+    // Remaining $AI balance in the distributor
+    fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'User-Agent': 'chain-monitor/1.0' },
+      body: JSON.stringify({
+        jsonrpc: '2.0', method: 'eth_call',
+        params: [{ to: AI_TOKEN, data: '0x70a08231' + pad(AIRDROP) }, 'latest'],
+        id: 1,
+      }),
+    }).then(r => r.json()),
+    // Outgoing $AI Transfer events from distributor → count unique claimants & txs
+    fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'User-Agent': 'chain-monitor/1.0' },
+      body: JSON.stringify({
+        jsonrpc: '2.0', method: 'eth_getLogs',
+        params: [{ address: AI_TOKEN, topics: [TRANSFER_TOPIC, fromTopic], fromBlock: '0x0', toBlock: 'latest' }],
+        id: 2,
+      }),
+    }).then(r => r.json()),
+    // Merkl API for campaign-specific total amount
+    fetch(`https://api.merkl.xyz/v4/campaigns/${MERKL_DB_ID}`, {
+      headers: { 'User-Agent': 'chain-monitor/1.0' },
+    }).then(r => r.json()).catch(() => null),
+  ]);
+
+  // Total from Merkl API (authoritative for this specific campaign)
+  const merklAmount = merklRes?.amount;
+  const total = merklAmount ? Number(BigInt(merklAmount)) / 1e18 : null;
+
+  // Remaining balance in the distributor (across all $AI campaigns, but the other ones are tiny)
+  const remaining = balRes.result && balRes.result.length > 2
+    ? Number(BigInt(balRes.result)) / 1e18 : null;
+
+  // claimed ≈ campaign total − distributor balance (other campaigns are negligible vs 494M)
+  const claimed = total != null && remaining != null ? total - remaining : null;
+
+  // Count unique recipients and tx count from Transfer events
+  const claimants = new Set();
+  const logs = Array.isArray(logsRes.result) ? logsRes.result : [];
+  for (const log of logs) {
+    if (log.topics?.[2]) claimants.add('0x' + log.topics[2].slice(-40));
+  }
+
+  const data = {
+    total,
+    remaining,
+    claimed,
+    claim_count: logs.length,
+    claimants: claimants.size,
+  };
+  _airdropCache = { ts: Date.now(), data };
+  return data;
+}
+
+// ── Holding rate: what % of sale recipients still hold their full allocation ─
+// Fetches distribution JSON once, then batch-checks balances. 10-min cache.
+
+const DISTRO_JSON_URL = 'https://storage.googleapis.com/airdrops/13801000927989012156.json';
+let _distroCache = { data: null };
+let _holdingCache = { ts: 0, data: null };
+
+async function fetchHoldingRate(env) {
+  if (Date.now() - _holdingCache.ts < 600_000 && _holdingCache.data) return _holdingCache.data;
+
+  const rpcUrl = env.RPC_URL || PUBLIC_RPC;
+
+  if (!_distroCache.data) {
+    const resp = await fetch(DISTRO_JSON_URL, { headers: { 'User-Agent': 'chain-monitor/1.0' } });
+    const json = await resp.json();
+    _distroCache.data = json.rewards; // { addr: { 'AI Token Sale Allocation': 'wei' } }
+  }
+
+  const entries = Object.entries(_distroCache.data);
+  const BATCH = 100;
+
+  // Fire all batch RPC calls concurrently
+  const batchPromises = [];
+  for (let i = 0; i < entries.length; i += BATCH) {
+    const chunk = entries.slice(i, i + BATCH);
+    batchPromises.push(
+      fetch(rpcUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'User-Agent': 'chain-monitor/1.0' },
+        body: JSON.stringify(chunk.map(([addr], j) => ({
+          jsonrpc: '2.0', method: 'eth_call',
+          params: [{ to: AI_TOKEN, data: '0x70a08231' + addr.slice(2).toLowerCase().padStart(64, '0') }, 'latest'],
+          id: j,
+        }))),
+      }).then(r => r.json()).then(results => ({ results, chunk }))
+    );
+  }
+
+  const responses = await Promise.all(batchPromises);
+
+  let heldCount = 0, totalCount = 0;
+  let heldBig = 0n, totalBig = 0n;
+
+  for (const { results, chunk } of responses) {
+    for (let j = 0; j < chunk.length; j++) {
+      const alloc = BigInt(chunk[j][1]['AI Token Sale Allocation']);
+      const res = results.find(r => r.id === j);
+      const balance = res?.result && res.result.length > 2 ? BigInt(res.result) : 0n;
+      totalBig += alloc;
+      totalCount++;
+      if (balance >= alloc) { heldCount++; heldBig += alloc; }
+    }
+  }
+
+  const data = {
+    held_count:     heldCount,
+    total_count:    totalCount,
+    held_pct:       totalCount ? heldCount / totalCount * 100 : 0,
+    held_value_pct: totalBig > 0n ? Number(heldBig * 10000n / totalBig) / 100 : 0,
+  };
+  _holdingCache = { ts: Date.now(), data };
+  return data;
+}
+
+// ── CoinGecko $AI token data (60s cache) ──────────────────────────────────
+
+const CMC_ID   = 39883; // Gensyn $AI
+const CMC_BASE = 'https://pro-api.coinmarketcap.com';
+let _tokenCache = { ts: 0, data: null };
+
+// Group price snapshots into OHLCV candles of bucketMs width
+// Returns [timestamp, open, high, low, close, volume]
+function toOhlc(quotes, bucketMs) {
+  const map = new Map();
+  for (const q of quotes) {
+    const t = Math.floor(new Date(q.timestamp).getTime() / bucketMs) * bucketMs;
+    const p = q.quote.USD.price;
+    const v = q.quote.USD.volume_24h;
+    if (!map.has(t)) map.set(t, { o: p, h: p, l: p, c: p, v });
+    else { const b = map.get(t); b.h = Math.max(b.h, p); b.l = Math.min(b.l, p); b.c = p; b.v = v; }
+  }
+  return [...map.entries()].sort((a, b) => a[0] - b[0]).map(([t, b]) => [t, b.o, b.h, b.l, b.c, b.v]);
+}
+
+async function fetchTokenData(env) {
+  if (Date.now() - _tokenCache.ts < 300_000 && _tokenCache.data) return _tokenCache.data;
+  const key = env.CMC_API_KEY;
+  const cmcFetch = url => fetch(url, { headers: { 'X-CMC_PRO_API_KEY': key } })
+    .then(r => { if (!r.ok) throw new Error(`CMC ${r.status}`); return r.json(); });
+
+  const [latest, hist5m] = await Promise.all([
+    cmcFetch(`${CMC_BASE}/v1/cryptocurrency/quotes/latest?id=${CMC_ID}&convert=USD,ETH`),
+    cmcFetch(`${CMC_BASE}/v1/cryptocurrency/quotes/historical?id=${CMC_ID}&count=2000&interval=5m&convert=USD,ETH`),
+  ]);
+
+  const coin = latest.data[CMC_ID];
+  const usd  = coin.quote.USD;
+  const eth  = coin.quote.ETH;
+
+  const fiveMin = hist5m.data?.quotes || [];
+  const last24h = fiveMin.slice(-288); // last 288 × 5m = 24h
+
+  // 24h chart: hourly candles from last 24h of 5m data
+  const ohlc_24h = toOhlc(last24h, 3600_000);
+  // history chart: 4h candles from all available 5m data → real OHLC spreads
+  const ohlc_30d = toOhlc(fiveMin, 4 * 3600_000);
+
+  const h24usd = fiveMin.map(q => q.quote.USD.price);
+  const h24eth = fiveMin.map(q => q.quote.ETH.price);
+  const high_24h     = h24usd.length ? Math.max(...h24usd) : null;
+  const low_24h      = h24usd.length ? Math.min(...h24usd) : null;
+  const high_24h_eth = h24eth.length ? Math.max(...h24eth) : null;
+  const low_24h_eth  = h24eth.length ? Math.min(...h24eth) : null;
+
+  const data = {
+    price:               usd.price,
+    price_eth:           eth.price,
+    price_change_1h:     usd.percent_change_1h,
+    price_change_24h:    usd.percent_change_24h,
+    price_change_7d:     usd.percent_change_7d,
+    price_change_30d:    usd.percent_change_30d,
+    price_change_1h_eth:  eth.percent_change_1h,
+    price_change_24h_eth: eth.percent_change_24h,
+    price_change_7d_eth:  eth.percent_change_7d,
+    price_change_30d_eth: eth.percent_change_30d,
+    high_24h,
+    low_24h,
+    high_24h_eth,
+    low_24h_eth,
+    market_cap:    usd.market_cap,
+    fdv:           usd.fully_diluted_market_cap,
+    volume_24h:    usd.volume_24h,
+    circulating:   coin.circulating_supply,
+    total_supply:  coin.total_supply,
+    ohlc_30d,
+    ohlc_24h,
+  };
+  _tokenCache = { ts: Date.now(), data };
+  return data;
+}
+
 // ── /api/data handler ─────────────────────────────────────────────────────
 
 async function handleData(env) {
-  const [blocks, stats, rpc, l1_eth, delphi, usdc, poolVol] = await Promise.allSettled([
+  const [blocks, stats, rpc, l1_eth, delphi, usdc, poolVol, chainSnap] = await Promise.allSettled([
     getJson(BLOCKS_API),
     getJson(STATS_API),
     fetchRpc(env),
@@ -353,6 +620,7 @@ async function handleData(env) {
     fetchDelphiStats(env.DB),
     getUsdceData(),
     fetchPoolVol24h(),
+    fetchChainSnapshot(env.DB),
   ]);
 
   return Response.json({
@@ -365,6 +633,7 @@ async function handleData(env) {
     usdc_transfers:  usdc.status   === 'fulfilled' ? usdc.value.transfers  : [],
     usdc_vol_24h:    usdc.status   === 'fulfilled' ? usdc.value.vol24h     : null,
     pool_vol_24h:    poolVol.status === 'fulfilled' ? poolVol.value        : null,
+    chain_snap:      chainSnap.status === 'fulfilled' ? chainSnap.value   : null,
   }, {
     headers: {
       'Cache-Control': 'no-store, no-cache, must-revalidate',
@@ -379,9 +648,22 @@ async function handleData(env) {
 export default {
   async fetch(request, env) {
     const { pathname } = new URL(request.url);
-    if (pathname === '/api/data') return handleData(env);
+    if (pathname === '/api/data')  return handleData(env);
+    if (pathname === '/api/token') {
+      try {
+        const [data, airdropData, holdingData] = await Promise.all([
+          fetchTokenData(env),
+          fetchAirdropData(env).catch(() => null),
+          fetchHoldingRate(env).catch(() => null),
+        ]);
+        const airdrop = airdropData ? { ...airdropData, ...(holdingData || {}) } : null;
+        return Response.json({ ...data, airdrop }, { headers: { 'Cache-Control': 'no-store' } });
+      } catch (e) {
+        return Response.json({ error: String(e) }, { status: 500 });
+      }
+    }
     if (!env.ASSETS) return new Response('Not Found', { status: 404 });
-    return env.ASSETS.fetch(request);   // serve public/index.html etc.
+    return env.ASSETS.fetch(request);
   },
 
   async scheduled(event, env, ctx) {
