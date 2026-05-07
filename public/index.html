@@ -121,7 +121,7 @@
 </div><!-- /container -->
 
 <script>
-const G = '#55cc55', R = '#cc5566', T = '#ddcc44', D = '#ffffff', W = '#ffffff';
+const G = '#55cc55', R = '#cc5566', T = '#ddcc44', D = '#ffffff', W = '#ffffff', MC = '#55ddcc';
 
 const PT = 'America/Los_Angeles';
 function fmtPT(date, opts) {
@@ -272,10 +272,13 @@ function renderTrades(d) {
     const c    = t.side === 'BUY' ? G : t.side === 'REDEEM' ? T : R;
     const diff = Math.floor((Date.now() / 1000) - t.timestamp_);
     const ago  = diff < 60 ? diff + 's ago' : diff < 3600 ? Math.floor(diff / 60) + 'm ago' : Math.floor(diff / 3600) + 'h ago';
-    return `<tr>
+    const isMC = d.mcSet?.has(t.addr);
+    const bg   = isMC ? 'background:rgba(85,221,204,0.08);' : '';
+    const tag  = isMC ? ` <span style="color:${MC};font-weight:bold">MC</span>` : '';
+    return `<tr style="${bg}">
       <td class="bold" style="color:${c}">${t.side}</td>
       <td style="color:${W};padding-left:8px">${ago}</td>
-      <td style="color:${W};padding-left:8px">${addrLink(t.addr)}</td>
+      <td style="color:${W};padding-left:8px">${addrLink(t.addr)}${tag}</td>
       <td class="r bold" style="color:${W}">${usd(t.usdc / 1e6)}</td>
     </tr>`;
   }).join('');
@@ -390,8 +393,11 @@ function renderTopTraders(d, limit) {
   const traders = (d.delphi?.top_traders || []).slice(0, limit);
   if (!traders.length) return '<span class="dim">No data</span>';
   const rows = traders.map(t => {
-    return `<tr>
-      <td style="color:${W}">${addrLink(t.addr)}</td>
+    const isMC = d.mcSet?.has(t.addr);
+    const bg   = isMC ? 'background:rgba(85,221,204,0.08);' : '';
+    const tag  = isMC ? ` <span style="color:${MC};font-weight:bold">MC</span>` : '';
+    return `<tr style="${bg}">
+      <td style="color:${W}">${addrLink(t.addr)}${tag}</td>
       <td class="r bold" style="color:${W};padding-left:8px">${t.n}</td>
       <td class="r" style="color:${W};padding-left:8px">${usd(t.vol / 1e6)}</td>
     </tr>`;
@@ -802,8 +808,9 @@ async function refresh() {
     setPanel('p-vol-7d',          renderVol7d(d));
     setPanel('p-count-alltime',   renderCountAllTime(d));
     setPanel('p-count-7d',        renderCount7d(d));
-    const creatorCount = (d.delphi?.creator_stats || []).length;
-    setPanel('p-top-traders',  renderTopTraders(d, creatorCount));
+    const creators = d.delphi?.creator_stats || [];
+    d.mcSet = new Set(creators.map(c => c.address));
+    setPanel('p-top-traders',  renderTopTraders(d, creators.length));
     setPanel('p-creators',     renderCreators(d));
   } catch (e) {
     document.getElementById('status').textContent = '● ' + e.message;
