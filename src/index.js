@@ -110,6 +110,41 @@ async function fetchL1Eth(env) {
 
 // ── Delphi stats from D1 ──────────────────────────────────────────────────
 
+const KNOWN_CREATORS = [
+  '0x9270d8883cce1718d696b180a7375e90020b8382',
+  '0xdcd3237bd2533495fac31404e3cf9af7be52b87e',
+  '0xa51eff3178fcc9ea855bdaa6701e9203f2b89b22',
+  '0xe929a4981dcca4938bb8a408aa7621e925551358',
+  '0xec7f608e0be45a678cea83f1622af8805b480c33',
+  '0xbc0329d496ab99c5e6cb922a4086c1a7e7b70e3d',
+  '0x08441f3f3f464b3faf7d8e1c3fc031988534ee82',
+  '0x38dc5f767bd18affa9f69c0837eec85307123e4b',
+  '0xb113aa298ff017ac09fd0543c765372bdbc8a34f',
+  '0xba8918761ce99b58c4ea6c17f66eb959bc6abf51',
+  '0xd9f362269ed9e6d16a934e93d685522adae8da2c',
+  '0xc3d5ff3cac2e159f510ae960c358c454c6cbb8b5',
+  '0x6401cc2098d454126c0b4560657202e036c7fd7c',
+  '0x03a30787d5fa7e1ae18aa61cbe56664c7d7be2f3',
+  '0x787b82218f3df2a3df74ef710c6c2bae0ee5dd22',
+  '0x72954764bbfffb2bb69935b482ed1b6312859db1',
+  '0x1146e51effa79717657d87dc4820e250a1ada8ed',
+  '0x85a871189383bf4602d354bd9a971ff49c958694',
+  '0x9379132a7f6c6911ea3bcd274ba863f7ce0854ad',
+  '0x450ca99ae872ac62180c463dd9fd2fa82ccda65b',
+  '0xaa50869f56df8394476b24a42a8feb82e47eeb16',
+  '0x20791fe968735496944af478da074ca107264424',
+  '0xe6dc575be35a3844116c7a4b68f32b64e4aaee1c',
+  '0x44f6f1affec7d43d6ae3f80a5174ac847487e035',
+  '0x7c0bac5d86cd0ca5950caa5febc973c1b160c9e5',
+  '0xf76c5c00d5f48e5341fdd2b59f9d7f9f77d9ae9a',
+  '0xe917b6f1242b36e4fd40be594dcdd10104a39e00',
+  '0x296cea276c6468d019c99c35aea4670b273a4052',
+  '0x1e297a077eee02840120a1bf149c78763c703169',
+  '0x8a556a72361a289bfa74e22b8d31d8732e58712a',
+  '0x062415916a9cb72ed77d08159407d4c6f15045e4',
+  '0xc463b3bbe4ee8bfc2c97abd422e27386933e0fb1',
+];
+
 async function ensureSchema(db) {
   await db.batch([
     db.prepare(`CREATE TABLE IF NOT EXISTS buys (id TEXT PRIMARY KEY, block_number INTEGER, timestamp_ INTEGER, tx_hash TEXT, market_proxy TEXT, buyer TEXT, outcome_idx INTEGER, tokens_in INTEGER, shares_out TEXT)`),
@@ -119,12 +154,23 @@ async function ensureSchema(db) {
     db.prepare(`CREATE TABLE IF NOT EXISTS resolutions (id TEXT PRIMARY KEY, block_number INTEGER, timestamp_ INTEGER, tx_hash TEXT, market_proxy TEXT, winning_outcome_idx INTEGER, market_creator_reward INTEGER, refund INTEGER, market_creator_trading_fees INTEGER)`),
     db.prepare(`CREATE TABLE IF NOT EXISTS sync_log (table_name TEXT PRIMARY KEY, last_block INTEGER DEFAULT 0, last_synced TEXT)`),
     db.prepare(`CREATE TABLE IF NOT EXISTS chain_snapshots (ts INTEGER PRIMARY KEY, txs_today INTEGER, total_addresses INTEGER)`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS markets (market_proxy TEXT PRIMARY KEY, creator TEXT, tx_hash TEXT, block_number INTEGER, timestamp_ INTEGER)`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS creators (address TEXT PRIMARY KEY, name TEXT)`),
     db.prepare(`INSERT OR IGNORE INTO sync_log(table_name, last_block) VALUES ('buys', 0)`),
     db.prepare(`INSERT OR IGNORE INTO sync_log(table_name, last_block) VALUES ('sells', 0)`),
     db.prepare(`INSERT OR IGNORE INTO sync_log(table_name, last_block) VALUES ('redemptions', 0)`),
     db.prepare(`INSERT OR IGNORE INTO sync_log(table_name, last_block) VALUES ('liquidations', 0)`),
     db.prepare(`INSERT OR IGNORE INTO sync_log(table_name, last_block) VALUES ('resolutions', 0)`),
+    db.prepare(`INSERT OR IGNORE INTO sync_log(table_name, last_block) VALUES ('markets', 0)`),
   ]);
+
+  // Seed known creators (INSERT OR IGNORE so manual name updates are preserved)
+  const seedStmts = KNOWN_CREATORS.map(addr =>
+    db.prepare('INSERT OR IGNORE INTO creators (address) VALUES (?)').bind(addr)
+  );
+  for (let i = 0; i < seedStmts.length; i += 100) {
+    await db.batch(seedStmts.slice(i, i + 100));
+  }
 }
 
 async function fetchChainSnapshot(db) {
@@ -136,7 +182,7 @@ async function fetchChainSnapshot(db) {
 }
 
 async function fetchDelphiStats(db) {
-  const [r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15, r16, r17, r18, r19, r20, r21, r22, r23, r24, r25, r26, r27, r28, r29, r30, r31, r32, r33, r34, r35, r36, r37, r38, r39, r40, r41] = await db.batch([
+  const [r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15, r16, r17, r18, r19, r20, r21, r22, r23, r24, r25, r26, r27, r28, r29, r30, r31, r32, r33, r34, r35, r36, r37, r38, r39, r40, r41, r42, r43, r44, r45] = await db.batch([
     db.prepare('SELECT COALESCE(SUM(tokens_in),0)  AS v FROM buys'),
     db.prepare('SELECT COALESCE(SUM(tokens_out),0) AS v FROM sells'),
     db.prepare('SELECT COALESCE(SUM(tokens_out),0) AS v FROM redemptions'),
@@ -147,9 +193,11 @@ async function fetchDelphiStats(db) {
     db.prepare('SELECT COUNT(*) AS v FROM resolutions'),
     db.prepare('SELECT MAX(timestamp_) AS v FROM buys'),
     db.prepare(`
-      SELECT 'BUY'  AS side, timestamp_, buyer  AS addr, market_proxy, tokens_in  AS usdc FROM buys
+      SELECT 'BUY'    AS side, timestamp_, buyer   AS addr, market_proxy, tokens_in  AS usdc FROM buys
       UNION ALL
-      SELECT 'SELL' AS side, timestamp_, seller AS addr, market_proxy, tokens_out AS usdc FROM sells
+      SELECT 'SELL'   AS side, timestamp_, seller  AS addr, market_proxy, tokens_out AS usdc FROM sells
+      UNION ALL
+      SELECT 'REDEEM' AS side, timestamp_, redeemer AS addr, market_proxy, tokens_out AS usdc FROM redemptions
       ORDER BY timestamp_ DESC LIMIT 10
     `),
     db.prepare(`
@@ -167,7 +215,7 @@ async function fetchDelphiStats(db) {
     db.prepare(`SELECT COUNT(*) AS v FROM resolutions WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 86400`),
     db.prepare(`SELECT COUNT(DISTINCT market_proxy) AS v FROM (SELECT market_proxy FROM buys WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 86400 UNION SELECT market_proxy FROM sells WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 86400 UNION SELECT market_proxy FROM resolutions WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 86400)`),
     db.prepare(`SELECT COALESCE(SUM(market_creator_reward + market_creator_trading_fees), 0) AS v FROM resolutions WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 86400`),
-    db.prepare(`SELECT addr, COUNT(*) AS n, SUM(vol) AS vol FROM (SELECT buyer AS addr, tokens_in AS vol FROM buys UNION ALL SELECT seller AS addr, tokens_out AS vol FROM sells) GROUP BY addr ORDER BY n DESC LIMIT 5`),
+    db.prepare(`SELECT addr, COUNT(*) AS n, SUM(vol) AS vol FROM (SELECT buyer AS addr, tokens_in AS vol FROM buys UNION ALL SELECT seller AS addr, tokens_out AS vol FROM sells) GROUP BY addr ORDER BY n DESC LIMIT 50`),
     db.prepare(`SELECT COUNT(DISTINCT market_proxy) AS v FROM (SELECT market_proxy FROM buys UNION SELECT market_proxy FROM sells) WHERE market_proxy NOT IN (SELECT market_proxy FROM resolutions)`),
     db.prepare(`SELECT COALESCE(SUM(tokens_in), 0) AS v FROM buys WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 172800 AND timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 86400`),
     db.prepare(`SELECT COALESCE(SUM(tokens_out), 0) AS v FROM sells WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 172800 AND timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 86400`),
@@ -178,7 +226,7 @@ async function fetchDelphiStats(db) {
     db.prepare(`SELECT COUNT(DISTINCT market_proxy) AS v FROM (SELECT market_proxy FROM buys WHERE timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 86400 UNION SELECT market_proxy FROM sells WHERE timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 86400) WHERE market_proxy NOT IN (SELECT market_proxy FROM resolutions WHERE timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 86400)`),
     db.prepare(`SELECT COUNT(*) AS v FROM (SELECT id FROM buys WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 86400 UNION ALL SELECT id FROM sells WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 86400)`),
     db.prepare(`SELECT COUNT(*) AS v FROM (SELECT id FROM buys WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 172800 AND timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 86400 UNION ALL SELECT id FROM sells WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 172800 AND timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 86400)`),
-    db.prepare(`SELECT CAST(timestamp_ / 21600 AS INTEGER) AS hr, COUNT(*) AS n FROM (SELECT timestamp_ FROM buys WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 604800 UNION ALL SELECT timestamp_ FROM sells WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 604800) GROUP BY hr ORDER BY hr ASC`),
+    db.prepare(`SELECT CAST(timestamp_ / 43200 AS INTEGER) AS hr, COUNT(*) AS n FROM (SELECT timestamp_ FROM buys WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 604800 UNION ALL SELECT timestamp_ FROM sells WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 604800) GROUP BY hr ORDER BY hr ASC`),
     db.prepare(`SELECT COALESCE(SUM(tokens_in), 0) AS v FROM buys WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 604800`),
     db.prepare(`SELECT COALESCE(SUM(tokens_out), 0) AS v FROM sells WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 604800`),
     db.prepare(`SELECT COALESCE(SUM(tokens_in), 0) AS v FROM buys WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 1209600 AND timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 604800`),
@@ -190,6 +238,10 @@ async function fetchDelphiStats(db) {
     db.prepare(`SELECT COUNT(DISTINCT market_proxy) AS v FROM (SELECT market_proxy FROM buys WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 691200 AND timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 604800 UNION SELECT market_proxy FROM sells WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 691200 AND timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 604800)`),
     db.prepare(`SELECT COUNT(*) AS v FROM resolutions WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 691200 AND timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 604800`),
     db.prepare(`SELECT COALESCE(SUM(market_creator_reward + market_creator_trading_fees), 0) AS v FROM resolutions WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 691200 AND timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 604800`),
+    db.prepare(`SELECT CAST(timestamp_ / 86400 AS INTEGER) AS day, SUM(vol) AS v FROM (SELECT timestamp_, tokens_in AS vol FROM buys UNION ALL SELECT timestamp_, tokens_out AS vol FROM sells) GROUP BY day ORDER BY day ASC`),
+    db.prepare(`SELECT CAST(timestamp_ / 43200 AS INTEGER) AS hr, SUM(vol) AS v FROM (SELECT timestamp_, tokens_in AS vol FROM buys WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 604800 UNION ALL SELECT timestamp_, tokens_out AS vol FROM sells WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 604800) GROUP BY hr ORDER BY hr ASC`),
+    db.prepare(`SELECT CAST(timestamp_ / 86400 AS INTEGER) AS day, COUNT(*) AS n FROM (SELECT timestamp_ FROM buys UNION ALL SELECT timestamp_ FROM sells) GROUP BY day ORDER BY day ASC`),
+    db.prepare(`SELECT tokens_in AS amount FROM buys WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 604800 UNION ALL SELECT tokens_out AS amount FROM sells WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 604800`),
   ]);
   const v = (res) => res.results?.[0]?.v ?? 0;
   return {
@@ -233,7 +285,44 @@ async function fetchDelphiStats(db) {
     resolutions_prev24h: v(r24),
     markets_prev24h:     v(r25),
     fees_prev24h:        v(r26),
+    vol_daily:           r42.results || [],
+    vol_6h:              r43.results || [],
+    count_daily:         r44.results || [],
+    trade_amounts_7d:    (r45.results || []).map(r => r.amount / 1e6),
+    creator_stats:       await fetchCreatorStats(db),
   };
+}
+
+let _creatorStatsCache = { ts: 0, data: [] };
+
+async function fetchCreatorStats(db) {
+  if (Date.now() - _creatorStatsCache.ts < 120_000) return _creatorStatsCache.data;
+  try {
+    const res = await db.prepare(`
+      WITH buy_vols AS (
+        SELECT m.creator, SUM(b.tokens_in) AS vol
+        FROM markets m JOIN buys b ON b.market_proxy = m.market_proxy
+        GROUP BY m.creator
+      ),
+      sell_vols AS (
+        SELECT m.creator, SUM(s.tokens_out) AS vol
+        FROM markets m JOIN sells s ON s.market_proxy = m.market_proxy
+        GROUP BY m.creator
+      )
+      SELECT m.creator AS address, cr.name,
+        COUNT(DISTINCT m.market_proxy) AS markets,
+        COALESCE(bv.vol, 0) + COALESCE(sv.vol, 0) AS vol
+      FROM markets m
+      LEFT JOIN creators cr ON cr.address = m.creator
+      LEFT JOIN buy_vols bv ON bv.creator = m.creator
+      LEFT JOIN sell_vols sv ON sv.creator = m.creator
+      GROUP BY m.creator
+      ORDER BY vol DESC, markets DESC
+    `).all();
+    const data = res.results || [];
+    _creatorStatsCache = { ts: Date.now(), data };
+    return data;
+  } catch (_) { return []; }
 }
 
 // ── Recent USDC.e transfers ───────────────────────────────────────────────
@@ -349,6 +438,23 @@ async function syncDelphi(env) {
     'id block_number timestamp_ transactionHash_ marketProxy winningOutcomeIdx marketCreatorReward refund marketCreatorTradingFeesCut',
     (db, r) => db.prepare('INSERT OR IGNORE INTO resolutions VALUES (?,?,?,?,?,?,?,?,?)')
       .bind(r.id, +r.block_number, +r.timestamp_, r.transactionHash_, r.marketProxy, +r.winningOutcomeIdx, +r.marketCreatorReward, +r.refund, +r.marketCreatorTradingFeesCut));
+
+  await syncTable(db, 'markets', 'initializeds',
+    'id block_number timestamp_ transactionHash_ contractId_',
+    (db, r) => db.prepare('INSERT OR IGNORE INTO markets (market_proxy, tx_hash, block_number, timestamp_) VALUES (?,?,?,?)')
+      .bind(r.contractId_.toLowerCase(), r.transactionHash_, +r.block_number, +r.timestamp_));
+
+  // Backfill creator address from block explorer (up to 10 per cron run to stay fast)
+  try {
+    const missing = await db.prepare('SELECT market_proxy, tx_hash FROM markets WHERE creator IS NULL LIMIT 10').all();
+    await Promise.all((missing.results || []).map(async (m) => {
+      const tx = await getJson(`https://gensyn-mainnet.explorer.alchemy.com/api/v2/transactions/${m.tx_hash}`);
+      const creator = tx?.from?.hash?.toLowerCase();
+      if (creator) {
+        await db.prepare('UPDATE markets SET creator=? WHERE market_proxy=?').bind(creator, m.market_proxy).run();
+      }
+    }));
+  } catch (_) {}
 }
 
 // ── Pool 24h volume cache (module-level, 30s TTL) ─────────────────────────

@@ -63,7 +63,7 @@
   .dim   { color: rgba(255,255,255,0.45); }
 
   .bar-wrap { padding-left: 8px; vertical-align: middle; width: 100%; }
-  .bar { height: 9px; background: #1a4a9f; display: inline-block; width: 90px; vertical-align: middle; }
+  .bar { height: 9px; background: #1a4a9f; display: inline-block; width: 90px; vertical-align: middle; overflow: hidden; }
   .bar-fill { height: 100%; display: block; }
 
   .sep { border: none; border-top: 1px solid #ffffff; margin: 4px 0; }
@@ -87,7 +87,7 @@
 <div class="grid3">
   <div class="panel" id="p-chain">  <div class="panel-title">Chain</div>      <span class="dim">loading…</span></div>
   <div class="panel" id="p-rpc">    <div class="panel-title">RPC</div> <span class="dim">loading…</span></div>
-  <div class="panel" id="p-liquidity"> <div class="panel-title">Funding</div>  <span class="dim">loading…</span></div>
+  <div class="panel" id="p-liquidity"><div class="panel-title" style="display:none"></div><span class="dim">loading…</span></div>
 </div>
 
 <div class="grid2">
@@ -96,14 +96,22 @@
 </div>
 <div class="grid2">
   <div class="panel" id="p-histogram">
-    <div class="panel-title">Trade Size Distribution</div>
+    <div class="panel-title">Trade Size Distribution (All Time)</div>
     <span class="dim">loading…</span>
   </div>
-  <div class="panel" id="p-trades-per-hour"><div class="panel-title">Weekly Trading Volume</div><span class="dim">loading…</span></div>
+  <div class="panel" id="p-histogram-7d"><div class="panel-title">Trade Size Distribution (Weekly)</div><span class="dim">loading…</span></div>
 </div>
 <div class="grid2">
-  <div class="panel" id="p-pool">       <div class="panel-title">ETH / USDC.e Pool</div> <span class="dim">loading…</span></div>
-  <div class="panel" id="p-top-traders"><div class="panel-title">Top Traders</div>        <span class="dim">loading…</span></div>
+  <div class="panel" id="p-vol-alltime"><div class="panel-title">Trade Volume ($) All Time</div><span class="dim">loading…</span></div>
+  <div class="panel" id="p-vol-7d">    <div class="panel-title">Trade Volume ($) 7 Days</div>  <span class="dim">loading…</span></div>
+</div>
+<div class="grid2">
+  <div class="panel" id="p-count-alltime"><div class="panel-title">Trade Count All Time</div><span class="dim">loading…</span></div>
+  <div class="panel" id="p-count-7d">    <div class="panel-title">Trade Count 7 Days</div>  <span class="dim">loading…</span></div>
+</div>
+<div class="grid2">
+  <div class="panel" id="p-top-traders"><div class="panel-title">Top Traders</div><span class="dim">loading…</span></div>
+  <div class="panel" id="p-creators"><div class="panel-title">Market Creators</div><span class="dim">loading…</span></div>
 </div>
 
 <div class="footer">
@@ -140,7 +148,7 @@ function row(label, val, color, note = '') {
   </tr>`;
 }
 function pct_change(curr, prev) {
-  if (!prev) return '<span style="color:rgba(255,255,255,0.4)">—</span>';
+  if (!prev) return '<span style="color:rgba(255,255,255,0.4)">+0%</span>';
   const p = (curr - prev) / prev * 100;
   if (Math.abs(p) > 999) return '<span style="color:rgba(255,255,255,0.4)">—</span>';
   const sign = p >= 0 ? '+' : '';
@@ -149,8 +157,14 @@ function pct_change(curr, prev) {
 }
 function setPanel(id, html) {
   const el = document.getElementById(id);
-  const title = el.querySelector('.panel-title').outerHTML;
+  const titleEl = el.querySelector('.panel-title');
+  const title = titleEl ? titleEl.outerHTML : '';
   el.innerHTML = title + html;
+}
+function fmtK(v) {
+  if (v >= 1e6) return '$' + (v/1e6).toFixed(1) + 'M';
+  if (v >= 1e3) return '$' + (v/1e3).toFixed(0) + 'k';
+  return '$' + v.toFixed(0);
 }
 
 // ── Chain ─────────────────────────────────────────────────────────────────
@@ -171,11 +185,7 @@ function renderChain(d) {
     <tr><td colspan="2" style="padding-bottom:4px">
       <div class="bar" style="width:100%"><div class="bar-fill" style="width:${(Math.log1p(Math.min(pct,100)) / Math.log1p(100) * 100).toFixed(1)}%;background:${pct > 90 ? R : pct > 60 ? T : G}"></div></div>
     </td></tr>
-    <tr>
-      <td style="color:${D}">Total Addresses</td>
-      <td class="r bold" style="color:${W}">${n(s.total_addresses)}</td>
-      ${d.chain_snap ? `<td class="note">${pct_change(s.total_addresses, d.chain_snap.total_addresses)}</td>` : ''}
-    </tr>
+    ${row('Total Addresses', n(s.total_addresses), W)}
   </table>`;
 }
 
@@ -254,7 +264,7 @@ function renderTrades(d) {
   const trades = d.delphi?.recent || [];
   if (!trades.length) return '<span class="dim">No trades yet</span>';
   const rows = trades.map(t => {
-    const c    = t.side === 'BUY' ? G : R;
+    const c    = t.side === 'BUY' ? G : t.side === 'REDEEM' ? T : R;
     const diff = Math.floor((Date.now() / 1000) - t.timestamp_);
     const ago  = diff < 60 ? diff + 's ago' : diff < 3600 ? Math.floor(diff / 60) + 'm ago' : Math.floor(diff / 3600) + 'h ago';
     const addr = t.addr.slice(0, 6) + '…' + t.addr.slice(-4);
@@ -317,13 +327,14 @@ function renderLiquidity(d) {
   const vol    = ((m.buy_vol_24h || 0) + (m.sell_vol_24h || 0)) / 1e6;
   const velocity = locked > 0 ? (vol / locked).toFixed(2) + 'x' : '—';
   return `<table>
-    ${row('Delphi TVL',       usd(locked),  G)}
-    ${row('Delphi Velocity',  velocity,     W)}
+    <tr><td colspan="2"><div class="panel-title" style="margin:0 0 2px">Delphi</div></td></tr>
+    ${row('TVL',       usd(locked),  G)}
+    ${row('Velocity',  velocity,     W)}
     ${row('Buy Burn Vault',  usd(r.bbv_usdc),  W)}
-    <tr><td colspan="2"><div class="panel-title" style="margin:4px 0 2px">Supply</div></td></tr>
-    ${row('$ETH',   d.l1_eth != null ? d.l1_eth.toFixed(4) : '—', W)}
-    ${row('$AI',    r.ai_supply != null ? (r.ai_supply / 1e9).toFixed(2) + 'B' : '—', W)}
-    ${row('$USDC.e', r.usdc_e != null ? Number(r.usdc_e).toLocaleString('en', {minimumFractionDigits:2, maximumFractionDigits:2}) : '—', W)}
+    <tr><td colspan="2"><div class="panel-title" style="margin:4px 0 2px">$USDC.e</div></td></tr>
+    ${row('Supply', r.usdc_e != null ? Number(r.usdc_e).toLocaleString('en', {minimumFractionDigits:2, maximumFractionDigits:2}) : '—', W)}
+    ${row('Pool Vol 24h', d.pool_vol_24h != null ? usd(d.pool_vol_24h / 1e6) : '—', W)}
+    ${row('Pool TVL',     usd(r.pool_tvl), W)}
   </table>`;
 }
 
@@ -368,22 +379,45 @@ function renderUsdce(d) {
   return `<table>${hdr}${rows}</table>`;
 }
 
-// ── Top Traders Bar Chart ─────────────────────────────────────────────────
-function renderTopTraders(d) {
-  const traders = d.delphi?.top_traders || [];
+// ── Top Traders ───────────────────────────────────────────────────────────
+function renderTopTraders(d, limit) {
+  const traders = (d.delphi?.top_traders || []).slice(0, limit);
   if (!traders.length) return '<span class="dim">No data</span>';
-  const maxN = traders[0].n;
   const rows = traders.map(t => {
     const addr = t.addr.slice(0, 6) + '…' + t.addr.slice(-4);
     return `<tr>
       <td style="color:${W}">${addr}</td>
       <td class="r bold" style="color:${W};padding-left:8px">${t.n}</td>
       <td class="r" style="color:${W};padding-left:8px">${usd(t.vol / 1e6)}</td>
-      ${bar(t.n / maxN * 100, G)}
     </tr>`;
   }).join('');
-  return `<table>
-    <tr><th>Address</th><th class="r" style="padding-left:8px">Trades</th><th class="r" style="padding-left:8px">Volume</th><th></th></tr>
+  return `<table style="width:100%">
+    <tr><th>Address</th><th class="r" style="padding-left:8px">Trades</th><th class="r" style="padding-left:8px">Volume</th></tr>
+    ${rows}
+  </table>`;
+}
+
+// ── Market Creators ───────────────────────────────────────────────────────
+function renderCreators(d) {
+  const creators = d.delphi?.creator_stats || [];
+  if (!creators.length) return '<span class="dim">No data</span>';
+  const maxVol = creators[0]?.vol || 1;
+  const rows = creators.map(c => {
+    const addr = c.address.slice(0, 6) + '…' + c.address.slice(-4);
+    const mkts = c.markets || 0;
+    const vol  = c.vol ? usd(c.vol / 1e6) : '<span class="dim">—</span>';
+    const vpm  = c.vol && mkts ? usd(c.vol / mkts / 1e6) : '<span class="dim">—</span>';
+    const pct  = (c.vol / maxVol * 100).toFixed(1);
+    return `<tr>
+      <td style="color:${W}">${c.name || addr}</td>
+      <td class="r bold" style="color:${W};padding-left:8px">${mkts || '<span class="dim">0</span>'}</td>
+      <td class="r bold" style="color:${W};padding-left:8px">${vol}</td>
+      <td class="r" style="color:${W};padding-left:8px">${vpm}</td>
+      <td style="padding-left:12px;width:80px"><div class="bar" style="width:80px"><div class="bar-fill" style="width:${pct}%;background:${G}"></div></div></td>
+    </tr>`;
+  }).join('');
+  return `<table style="width:100%">
+    <tr><th>Address</th><th class="r" style="padding-left:8px">Mkts</th><th class="r" style="padding-left:8px">Volume</th><th class="r" style="padding-left:8px">Vol/Mkt</th><th></th></tr>
     ${rows}
   </table>`;
 }
@@ -416,7 +450,7 @@ function renderTradesPerHour(d) {
   const grid = [0.5, 1].map(f => {
     const y = (pT + ph - f * ph).toFixed(1);
     return `<line x1="${pL}" y1="${y}" x2="${pL + pw}" y2="${y}" stroke="#ffffff" stroke-opacity="0.15" stroke-dasharray="3,3"/>
-            <text x="${pL - 3}" y="${(+y + 4).toFixed(1)}" fill="#ffffff" font-size="14" text-anchor="end" font-family="Menlo, Monaco, Consolas, Courier New, monospace">${Math.round(f * maxCount)}</text>`;
+            <text x="${pL - 3}" y="${(+y + 4).toFixed(1)}" fill="#ffffff" font-size="14.5" text-anchor="end" font-family="Menlo, Monaco, Consolas, Courier New, monospace">${Math.round(f * maxCount)}</text>`;
   }).join('');
 
   // x-axis: labels every 1 day (4 buckets)
@@ -438,13 +472,13 @@ function renderTradesPerHour(d) {
 }
 
 // ── Trade Size Histogram ──────────────────────────────────────────────────
-function renderHistogram(d) {
+function renderHistogram(d, cutoff = null) {
   const amounts = d.delphi?.trade_amounts || [];
   if (!amounts.length) return '<span class="dim">No data</span>';
 
   const BINS = 30;
   const sorted = [...amounts].sort((a, b) => a - b);
-  const cutoff = sorted[Math.floor(sorted.length * 0.99)];
+  if (cutoff === null) cutoff = sorted[Math.floor(sorted.length * 0.99)];
   const bw = cutoff / BINS;
   const counts = new Array(BINS).fill(0);
   for (const a of amounts) counts[Math.min(Math.floor(a / bw), BINS - 1)]++;
@@ -466,7 +500,7 @@ function renderHistogram(d) {
     const y = (pT + ph - f * ph).toFixed(1);
     const label = Math.round(f * maxCount);
     return `<line x1="${pL}" y1="${y}" x2="${pL + pw}" y2="${y}" stroke="#ffffff" stroke-opacity="0.15" stroke-dasharray="3,3"/>
-            <text x="${pL - 3}" y="${(+y + 4).toFixed(1)}" fill="#ffffff" font-size="14" text-anchor="end" font-family="Menlo, Monaco, Consolas, Courier New, monospace">${label}</text>`;
+            <text x="${pL - 3}" y="${(+y + 4).toFixed(1)}" fill="#ffffff" font-size="14.5" text-anchor="end" font-family="Menlo, Monaco, Consolas, Courier New, monospace">${label}</text>`;
   }).join('');
 
   const xLabels = [0, 0.25, 0.5, 0.75, 1].map(f => {
@@ -488,7 +522,255 @@ function renderHistogram(d) {
   return `<svg width="100%" viewBox="0 0 ${W} ${H}" style="display:block">
     ${grid}${bars}${axes}${xLabels}
   </svg>
-  <div style="text-align:center;font-size:14px;color:${T};margin-top:4px">Trade Size (USDC.e) · n=${amounts.length} · 30 bins</div>`;
+  <div style="text-align:center;font-size:14px;color:${T};margin-top:4px">Trade Size (USDC.e) · n=${amounts.length} · 30 bins · all time</div>`;
+}
+
+// ── Trade Size Histogram 7 Days ───────────────────────────────────────────
+function renderHistogram7d(d, cutoff = null) {
+  const amounts = d.delphi?.trade_amounts_7d || [];
+  if (!amounts.length) return '<span class="dim">No data</span>';
+
+  const BINS = 30;
+  const sorted = [...amounts].sort((a, b) => a - b);
+  if (cutoff === null) cutoff = sorted[Math.floor(sorted.length * 0.99)];
+  const bw = cutoff / BINS;
+  const counts = new Array(BINS).fill(0);
+  for (const a of amounts) counts[Math.min(Math.floor(a / bw), BINS - 1)]++;
+  const maxCount = Math.max(...counts);
+
+  const W = 880, H = 300;
+  const pL = 38, pR = 8, pT = 8, pB = 28;
+  const pw = W - pL - pR, ph = H - pT - pB;
+  const barW = pw / BINS;
+
+  const bars = counts.map((c, i) => {
+    const bh = c / maxCount * ph;
+    const x = (pL + i * barW).toFixed(1);
+    const y = (pT + ph - bh).toFixed(1);
+    return `<rect x="${x}" y="${y}" width="${(barW - 1).toFixed(1)}" height="${bh.toFixed(1)}" fill="${G}"/>`;
+  }).join('');
+
+  const grid = [0.5, 1].map(f => {
+    const y = (pT + ph - f * ph).toFixed(1);
+    const label = Math.round(f * maxCount);
+    return `<line x1="${pL}" y1="${y}" x2="${pL + pw}" y2="${y}" stroke="#ffffff" stroke-opacity="0.15" stroke-dasharray="3,3"/>
+            <text x="${pL - 3}" y="${(+y + 4).toFixed(1)}" fill="#ffffff" font-size="14.5" text-anchor="end" font-family="Menlo, Monaco, Consolas, Courier New, monospace">${label}</text>`;
+  }).join('');
+
+  const xLabels = [0, 0.25, 0.5, 0.75, 1].map(f => {
+    const x = (pL + f * pw).toFixed(1);
+    let label;
+    if (f === 1) {
+      label = '>' + (cutoff >= 10 ? cutoff.toFixed(0) : cutoff.toFixed(2));
+    } else {
+      const val = f * cutoff;
+      label = val >= 10 ? val.toFixed(0) : val.toFixed(2);
+    }
+    const anchor = f === 1 ? 'end' : f === 0 ? 'start' : 'middle';
+    return `<text x="${x}" y="${H - 4}" fill="#ffffff" font-size="14" text-anchor="${anchor}" font-family="Menlo, Monaco, Consolas, Courier New, monospace">${label}</text>`;
+  }).join('');
+
+  const axes = `<line x1="${pL}" y1="${pT}" x2="${pL}" y2="${pT + ph}" stroke="#ffffff" stroke-width="1"/>
+                <line x1="${pL}" y1="${pT + ph}" x2="${pL + pw}" y2="${pT + ph}" stroke="#ffffff" stroke-width="1"/>`;
+
+  return `<svg width="100%" viewBox="0 0 ${W} ${H}" style="display:block">
+    ${grid}${bars}${axes}${xLabels}
+  </svg>
+  <div style="text-align:center;font-size:14px;color:${T};margin-top:4px">Trade Size (USDC.e) · n=${amounts.length} · 30 bins · 7 days</div>`;
+}
+
+// ── Trade Volume All Time (daily bars) ───────────────────────────────────
+function renderVolAllTime(d) {
+  const raw = d.delphi?.vol_daily || [];
+  if (!raw.length) return '<span class="dim">No data</span>';
+
+  const map = new Map(raw.map(r => [r.day, r.v]));
+  const minDay = raw[0].day;
+  const nowDay = Math.floor(Date.now() / 86400000);
+  const allDays = [];
+  for (let dy = minDay; dy <= nowDay; dy++) allDays.push(dy);
+  const vols = allDays.map(dy => (map.get(dy) || 0) / 1e6);
+  const maxVol = Math.max(...vols, 1);
+
+  const SvgW = 880, H = 300;
+  const pL = 56, pR = 8, pT = 8, pB = 28;
+  const pw = SvgW - pL - pR, ph = H - pT - pB;
+  const barW = pw / allDays.length;
+
+  const bars = vols.map((v, i) => {
+    const bh = v / maxVol * ph;
+    const x = (pL + i * barW + 0.5).toFixed(1);
+    const y = (pT + ph - bh).toFixed(1);
+    const fill = i === vols.length - 1 ? T : G;
+    return `<rect x="${x}" y="${y}" width="${Math.max(barW - 1, 0.5).toFixed(1)}" height="${bh.toFixed(1)}" fill="${fill}"/>`;
+  }).join('');
+
+  const grid = [0.5, 1].map(f => {
+    const y = (pT + ph - f * ph).toFixed(1);
+    return `<line x1="${pL}" y1="${y}" x2="${pL + pw}" y2="${y}" stroke="#ffffff" stroke-opacity="0.15" stroke-dasharray="3,3"/>
+            <text x="${pL - 3}" y="${(+y + 4).toFixed(1)}" fill="#ffffff" font-size="14.5" text-anchor="end" font-family="Menlo, Monaco, Consolas, Courier New, monospace">${fmtK(f * maxVol)}</text>`;
+  }).join('');
+
+  const labelCount = Math.min(6, allDays.length - 1);
+  const xLabels = Array.from({length: labelCount + 1}, (_, i) => {
+    const idx = Math.round(i / labelCount * (allDays.length - 1));
+    const x = (pL + (idx + 0.5) * barW).toFixed(1);
+    const dt = new Date(allDays[idx] * 86400000);
+    const label = (dt.getUTCMonth() + 1) + '/' + dt.getUTCDate();
+    const anchor = i === labelCount ? 'end' : i === 0 ? 'start' : 'middle';
+    return `<text x="${x}" y="${H - 4}" fill="#ffffff" font-size="14" text-anchor="${anchor}" font-family="Menlo, Monaco, Consolas, Courier New, monospace">${label}</text>`;
+  }).join('');
+
+  const axes = `<line x1="${pL}" y1="${pT}" x2="${pL}" y2="${pT + ph}" stroke="#ffffff" stroke-width="1"/>
+                <line x1="${pL}" y1="${pT + ph}" x2="${pL + pw}" y2="${pT + ph}" stroke="#ffffff" stroke-width="1"/>`;
+
+  return `<svg width="100%" viewBox="0 0 ${SvgW} ${H}" style="display:block">
+    ${grid}${bars}${axes}${xLabels}
+  </svg>`;
+}
+
+// ── Trade Volume 7 Days (6h bars) ─────────────────────────────────────────
+function renderVol7d(d) {
+  const raw = d.delphi?.vol_6h || [];
+  if (!raw.length) return '<span class="dim">No data</span>';
+
+  const BUCKETS = 14, BUCKET_S = 43200;
+  const nowBucket = Math.floor(Date.now() / (BUCKET_S * 1000));
+  const map = new Map(raw.map(r => [r.hr, r.v]));
+  const buckets = Array.from({length: BUCKETS}, (_, i) => nowBucket - (BUCKETS - 1) + i);
+  const vols = buckets.map(b => (map.get(b) || 0) / 1e6);
+  const maxVol = Math.max(...vols, 1);
+
+  const SvgW = 880, H = 300;
+  const pL = 56, pR = 8, pT = 8, pB = 28;
+  const pw = SvgW - pL - pR, ph = H - pT - pB;
+  const barW = pw / BUCKETS;
+
+  const bars = vols.map((v, i) => {
+    const bh = v / maxVol * ph;
+    const x = (pL + i * barW + 0.5).toFixed(1);
+    const y = (pT + ph - bh).toFixed(1);
+    const fill = i === vols.length - 1 ? T : G;
+    return `<rect x="${x}" y="${y}" width="${(barW - 1).toFixed(1)}" height="${bh.toFixed(1)}" fill="${fill}"/>`;
+  }).join('');
+
+  const grid = [0.5, 1].map(f => {
+    const y = (pT + ph - f * ph).toFixed(1);
+    return `<line x1="${pL}" y1="${y}" x2="${pL + pw}" y2="${y}" stroke="#ffffff" stroke-opacity="0.15" stroke-dasharray="3,3"/>
+            <text x="${pL - 3}" y="${(+y + 4).toFixed(1)}" fill="#ffffff" font-size="14.5" text-anchor="end" font-family="Menlo, Monaco, Consolas, Courier New, monospace">${fmtK(f * maxVol)}</text>`;
+  }).join('');
+
+  const xLabels = [0, 2, 4, 6, 8, 10, 12, BUCKETS].map(bi => {
+    const x = (pL + bi * barW).toFixed(1);
+    const daysAgo = Math.round((BUCKETS - bi) * 12 / 24);
+    const label = bi === BUCKETS ? 'now' : daysAgo + 'd ago';
+    const anchor = bi === BUCKETS ? 'end' : bi === 0 ? 'start' : 'middle';
+    return `<text x="${x}" y="${H - 4}" fill="#ffffff" font-size="14" text-anchor="${anchor}" font-family="Menlo, Monaco, Consolas, Courier New, monospace">${label}</text>`;
+  }).join('');
+
+  const axes = `<line x1="${pL}" y1="${pT}" x2="${pL}" y2="${pT + ph}" stroke="#ffffff" stroke-width="1"/>
+                <line x1="${pL}" y1="${pT + ph}" x2="${pL + pw}" y2="${pT + ph}" stroke="#ffffff" stroke-width="1"/>`;
+
+  return `<svg width="100%" viewBox="0 0 ${SvgW} ${H}" style="display:block">
+    ${grid}${bars}${axes}${xLabels}
+  </svg>`;
+}
+
+// ── Trade Count All Time (daily bars) ────────────────────────────────────
+function renderCountAllTime(d) {
+  const raw = d.delphi?.count_daily || [];
+  if (!raw.length) return '<span class="dim">No data</span>';
+
+  const map = new Map(raw.map(r => [r.day, r.n]));
+  const minDay = raw[0].day;
+  const nowDay = Math.floor(Date.now() / 86400000);
+  const allDays = [];
+  for (let dy = minDay; dy <= nowDay; dy++) allDays.push(dy);
+  const counts = allDays.map(dy => map.get(dy) || 0);
+  const maxCount = Math.max(...counts, 1);
+
+  const SvgW = 880, H = 300;
+  const pL = 38, pR = 8, pT = 8, pB = 28;
+  const pw = SvgW - pL - pR, ph = H - pT - pB;
+  const barW = pw / allDays.length;
+
+  const bars = counts.map((c, i) => {
+    const bh = c / maxCount * ph;
+    const x = (pL + i * barW + 0.5).toFixed(1);
+    const y = (pT + ph - bh).toFixed(1);
+    const fill = i === counts.length - 1 ? T : G;
+    return `<rect x="${x}" y="${y}" width="${Math.max(barW - 1, 0.5).toFixed(1)}" height="${bh.toFixed(1)}" fill="${fill}"/>`;
+  }).join('');
+
+  const grid = [0.5, 1].map(f => {
+    const y = (pT + ph - f * ph).toFixed(1);
+    return `<line x1="${pL}" y1="${y}" x2="${pL + pw}" y2="${y}" stroke="#ffffff" stroke-opacity="0.15" stroke-dasharray="3,3"/>
+            <text x="${pL - 3}" y="${(+y + 4).toFixed(1)}" fill="#ffffff" font-size="14.5" text-anchor="end" font-family="Menlo, Monaco, Consolas, Courier New, monospace">${Math.round(f * maxCount)}</text>`;
+  }).join('');
+
+  const labelCount = Math.min(6, allDays.length - 1);
+  const xLabels = Array.from({length: labelCount + 1}, (_, i) => {
+    const idx = Math.round(i / labelCount * (allDays.length - 1));
+    const x = (pL + (idx + 0.5) * barW).toFixed(1);
+    const dt = new Date(allDays[idx] * 86400000);
+    const label = (dt.getUTCMonth() + 1) + '/' + dt.getUTCDate();
+    const anchor = i === labelCount ? 'end' : i === 0 ? 'start' : 'middle';
+    return `<text x="${x}" y="${H - 4}" fill="#ffffff" font-size="14" text-anchor="${anchor}" font-family="Menlo, Monaco, Consolas, Courier New, monospace">${label}</text>`;
+  }).join('');
+
+  const axes = `<line x1="${pL}" y1="${pT}" x2="${pL}" y2="${pT + ph}" stroke="#ffffff" stroke-width="1"/>
+                <line x1="${pL}" y1="${pT + ph}" x2="${pL + pw}" y2="${pT + ph}" stroke="#ffffff" stroke-width="1"/>`;
+
+  return `<svg width="100%" viewBox="0 0 ${SvgW} ${H}" style="display:block">
+    ${grid}${bars}${axes}${xLabels}
+  </svg>`;
+}
+
+// ── Trade Count 7 Days (6h bars) ──────────────────────────────────────────
+function renderCount7d(d) {
+  const raw = d.delphi?.trades_per_hour || [];
+  if (!raw.length) return '<span class="dim">No data</span>';
+
+  const BUCKETS = 14, BUCKET_S = 43200;
+  const nowBucket = Math.floor(Date.now() / (BUCKET_S * 1000));
+  const map = new Map(raw.map(r => [r.hr, r.n]));
+  const buckets = Array.from({length: BUCKETS}, (_, i) => nowBucket - (BUCKETS - 1) + i);
+  const counts = buckets.map(b => map.get(b) || 0);
+  const maxCount = Math.max(...counts, 1);
+
+  const SvgW = 880, H = 300;
+  const pL = 38, pR = 8, pT = 8, pB = 28;
+  const pw = SvgW - pL - pR, ph = H - pT - pB;
+  const barW = pw / BUCKETS;
+
+  const bars = counts.map((c, i) => {
+    const bh = c / maxCount * ph;
+    const x = (pL + i * barW + 0.5).toFixed(1);
+    const y = (pT + ph - bh).toFixed(1);
+    const fill = i === counts.length - 1 ? T : G;
+    return `<rect x="${x}" y="${y}" width="${(barW - 1).toFixed(1)}" height="${bh.toFixed(1)}" fill="${fill}"/>`;
+  }).join('');
+
+  const grid = [0.5, 1].map(f => {
+    const y = (pT + ph - f * ph).toFixed(1);
+    return `<line x1="${pL}" y1="${y}" x2="${pL + pw}" y2="${y}" stroke="#ffffff" stroke-opacity="0.15" stroke-dasharray="3,3"/>
+            <text x="${pL - 3}" y="${(+y + 4).toFixed(1)}" fill="#ffffff" font-size="14.5" text-anchor="end" font-family="Menlo, Monaco, Consolas, Courier New, monospace">${Math.round(f * maxCount)}</text>`;
+  }).join('');
+
+  const xLabels = [0, 2, 4, 6, 8, 10, 12, BUCKETS].map(bi => {
+    const x = (pL + bi * barW).toFixed(1);
+    const daysAgo = Math.round((BUCKETS - bi) * 12 / 24);
+    const label = bi === BUCKETS ? 'now' : daysAgo + 'd ago';
+    const anchor = bi === BUCKETS ? 'end' : bi === 0 ? 'start' : 'middle';
+    return `<text x="${x}" y="${H - 4}" fill="#ffffff" font-size="14" text-anchor="${anchor}" font-family="Menlo, Monaco, Consolas, Courier New, monospace">${label}</text>`;
+  }).join('');
+
+  const axes = `<line x1="${pL}" y1="${pT}" x2="${pL}" y2="${pT + ph}" stroke="#ffffff" stroke-width="1"/>
+                <line x1="${pL}" y1="${pT + ph}" x2="${pL + pw}" y2="${pT + ph}" stroke="#ffffff" stroke-width="1"/>`;
+
+  return `<svg width="100%" viewBox="0 0 ${SvgW} ${H}" style="display:block">
+    ${grid}${bars}${axes}${xLabels}
+  </svg>`;
 }
 
 // ── refresh loop ──────────────────────────────────────────────────────────
@@ -507,10 +789,18 @@ async function refresh() {
     setPanel('p-liquidity', renderLiquidity(d));
     setPanel('p-delphi',   renderDelphi(d));
     setPanel('p-trades',   renderTrades(d));
-    setPanel('p-pool',     renderPool(d));
-    setPanel('p-trades-per-hour', renderTradesPerHour(d));
-    setPanel('p-histogram',       renderHistogram(d));
-    setPanel('p-top-traders',  renderTopTraders(d));
+    const allAmounts = d.delphi?.trade_amounts || [];
+    const sortedAll = [...allAmounts].sort((a, b) => a - b);
+    const sharedCutoff = allAmounts.length ? sortedAll[Math.floor(sortedAll.length * 0.99)] : null;
+    setPanel('p-histogram',       renderHistogram(d, sharedCutoff));
+    setPanel('p-histogram-7d',    renderHistogram7d(d, sharedCutoff));
+    setPanel('p-vol-alltime',     renderVolAllTime(d));
+    setPanel('p-vol-7d',          renderVol7d(d));
+    setPanel('p-count-alltime',   renderCountAllTime(d));
+    setPanel('p-count-7d',        renderCount7d(d));
+    const creatorCount = (d.delphi?.creator_stats || []).length;
+    setPanel('p-top-traders',  renderTopTraders(d, creatorCount));
+    setPanel('p-creators',     renderCreators(d));
   } catch (e) {
     document.getElementById('status').textContent = '● ' + e.message;
     document.getElementById('status').style.color = R;
