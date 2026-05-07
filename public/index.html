@@ -166,6 +166,11 @@ function fmtK(v) {
   if (v >= 1e3) return '$' + (v/1e3).toFixed(0) + 'k';
   return '$' + v.toFixed(0);
 }
+const EXPLORER = 'https://gensyn-mainnet.explorer.alchemy.com';
+function addrLink(addr, label) {
+  const display = label || (addr.slice(0, 6) + '…' + addr.slice(-4));
+  return `<a href="${EXPLORER}/address/${addr}" target="_blank" style="color:inherit;text-decoration:none" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${display}</a>`;
+}
 
 // ── Chain ─────────────────────────────────────────────────────────────────
 function renderChain(d) {
@@ -267,11 +272,10 @@ function renderTrades(d) {
     const c    = t.side === 'BUY' ? G : t.side === 'REDEEM' ? T : R;
     const diff = Math.floor((Date.now() / 1000) - t.timestamp_);
     const ago  = diff < 60 ? diff + 's ago' : diff < 3600 ? Math.floor(diff / 60) + 'm ago' : Math.floor(diff / 3600) + 'h ago';
-    const addr = t.addr.slice(0, 6) + '…' + t.addr.slice(-4);
     return `<tr>
       <td class="bold" style="color:${c}">${t.side}</td>
       <td style="color:${W};padding-left:8px">${ago}</td>
-      <td style="color:${W};padding-left:8px">${addr}</td>
+      <td style="color:${W};padding-left:8px">${addrLink(t.addr)}</td>
       <td class="r bold" style="color:${W}">${usd(t.usdc / 1e6)}</td>
     </tr>`;
   }).join('');
@@ -365,9 +369,11 @@ function renderUsdce(d) {
       ? (Number(t.total.value) / 10 ** decimals).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
       : '?';
     const when   = t.timestamp ? timeAgo(t.timestamp) : '?';
-    const from   = shortAddr(t.from?.hash);
-    const to     = shortAddr(t.to?.hash);
-    const txHash = t.transaction_hash ? t.transaction_hash.slice(0, 8) + '…' : '?';
+    const from   = t.from?.hash ? addrLink(t.from.hash) : '?';
+    const to     = t.to?.hash   ? addrLink(t.to.hash)   : '?';
+    const txHash = t.transaction_hash
+      ? `<a href="${EXPLORER}/tx/${t.transaction_hash}" target="_blank" style="color:inherit;text-decoration:none" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${t.transaction_hash.slice(0, 8)}…</a>`
+      : '?';
     return `<tr>
       <td style="color:${D}">${when}</td>
       <td style="color:${D};padding-left:10px">${from}</td>
@@ -384,9 +390,8 @@ function renderTopTraders(d, limit) {
   const traders = (d.delphi?.top_traders || []).slice(0, limit);
   if (!traders.length) return '<span class="dim">No data</span>';
   const rows = traders.map(t => {
-    const addr = t.addr.slice(0, 6) + '…' + t.addr.slice(-4);
     return `<tr>
-      <td style="color:${W}">${addr}</td>
+      <td style="color:${W}">${addrLink(t.addr)}</td>
       <td class="r bold" style="color:${W};padding-left:8px">${t.n}</td>
       <td class="r" style="color:${W};padding-left:8px">${usd(t.vol / 1e6)}</td>
     </tr>`;
@@ -403,13 +408,12 @@ function renderCreators(d) {
   if (!creators.length) return '<span class="dim">No data</span>';
   const maxVol = creators[0]?.vol || 1;
   const rows = creators.map(c => {
-    const addr = c.address.slice(0, 6) + '…' + c.address.slice(-4);
     const mkts = c.markets || 0;
     const vol  = c.vol ? usd(c.vol / 1e6) : '<span class="dim">—</span>';
     const vpm  = c.vol && mkts ? usd(c.vol / mkts / 1e6) : '<span class="dim">—</span>';
     const pct  = (c.vol / maxVol * 100).toFixed(1);
     return `<tr>
-      <td style="color:${W}">${c.name || addr}</td>
+      <td style="color:${W}">${addrLink(c.address, c.name || null)}</td>
       <td class="r bold" style="color:${W};padding-left:8px">${mkts || '<span class="dim">0</span>'}</td>
       <td class="r bold" style="color:${W};padding-left:8px">${vol}</td>
       <td class="r" style="color:${W};padding-left:8px">${vpm}</td>
