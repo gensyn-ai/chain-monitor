@@ -156,6 +156,7 @@ async function ensureSchema(db) {
     db.prepare(`CREATE TABLE IF NOT EXISTS chain_snapshots (ts INTEGER PRIMARY KEY, txs_today INTEGER, total_addresses INTEGER)`),
     db.prepare(`CREATE TABLE IF NOT EXISTS markets (market_proxy TEXT PRIMARY KEY, creator TEXT, tx_hash TEXT, block_number INTEGER, timestamp_ INTEGER)`),
     db.prepare(`CREATE TABLE IF NOT EXISTS creators (address TEXT PRIMARY KEY, name TEXT)`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS api_cache (k TEXT PRIMARY KEY, payload TEXT, ts INTEGER)`),
     db.prepare(`INSERT OR IGNORE INTO sync_log(table_name, last_block) VALUES ('buys', 0)`),
     db.prepare(`INSERT OR IGNORE INTO sync_log(table_name, last_block) VALUES ('sells', 0)`),
     db.prepare(`INSERT OR IGNORE INTO sync_log(table_name, last_block) VALUES ('redemptions', 0)`),
@@ -715,9 +716,12 @@ async function fetchTokenData(env) {
   return data;
 }
 
-// ── /api/data handler ─────────────────────────────────────────────────────
+// ── /api/data payload ─────────────────────────────────────────────────────
+// The expensive aggregates and external fetches are computed once per cron
+// run and stored as a single JSON blob in api_cache. /api/data reads that
+// blob (one D1 row) and is also edge-cached for 60s via the Cache API.
 
-async function handleData(env) {
+async function computeApiData(env) {
   const [blocks, stats, rpc, l1_eth, delphi, usdc, poolVol, chainSnap] = await Promise.allSettled([
     getJson(BLOCKS_API),
     getJson(STATS_API),
@@ -729,7 +733,7 @@ async function handleData(env) {
     fetchChainSnapshot(env.DB),
   ]);
 
-  return Response.json({
+  return {
     ts:              Date.now(),
     blocks:          blocks.status   === 'fulfilled' ? blocks.value   : [],
     stats:           stats.status    === 'fulfilled' ? stats.value    : {},
@@ -740,21 +744,47 @@ async function handleData(env) {
     usdc_vol_24h:    usdc.status   === 'fulfilled' ? usdc.value.vol24h     : null,
     pool_vol_24h:    poolVol.status === 'fulfilled' ? poolVol.value        : null,
     chain_snap:      chainSnap.status === 'fulfilled' ? chainSnap.value   : null,
-  }, {
+  };
+}
+
+async function writeApiCache(env, payload) {
+  await env.DB.prepare('INSERT OR REPLACE INTO api_cache (k, payload, ts) VALUES (?,?,?)')
+    .bind('main', payload, Date.now()).run();
+}
+
+async function handleData(env, request, ctx) {
+  const cache = caches.default;
+  const cached = await cache.match(request);
+  if (cached) return cached;
+
+  let payload = null;
+  try {
+    const row = await env.DB.prepare('SELECT payload FROM api_cache WHERE k=?').bind('main').first();
+    if (row?.payload) payload = row.payload;
+  } catch (_) { /* table may not exist yet on first deploy */ }
+
+  if (!payload) {
+    await ensureSchema(env.DB);
+    payload = JSON.stringify(await computeApiData(env));
+    try { await writeApiCache(env, payload); } catch (_) {}
+  }
+
+  const resp = new Response(payload, {
     headers: {
-      'Cache-Control': 'no-store, no-cache, must-revalidate',
-      'Pragma': 'no-cache',
-      'CDN-Cache-Control': 'no-store',
+      'Content-Type': 'application/json',
+      'Cache-Control': 'public, max-age=30, s-maxage=60',
     },
   });
+  ctx.waitUntil(cache.put(request, resp.clone()));
+  return resp;
 }
 
 // ── Worker entry ──────────────────────────────────────────────────────────
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const { pathname } = new URL(request.url);
-    if (pathname === '/api/data')  return handleData(env);
+    if (pathname === '/api/data')  return handleData(env, request, ctx);
     if (pathname === '/api/token') {
       try {
         const [data, airdropData, holdingData] = await Promise.all([
@@ -773,6 +803,12 @@ export default {
   },
 
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(syncDelphi(env));
+    ctx.waitUntil((async () => {
+      await syncDelphi(env);
+      try {
+        const payload = JSON.stringify(await computeApiData(env));
+        await writeApiCache(env, payload);
+      } catch (_) {}
+    })());
   },
 };
