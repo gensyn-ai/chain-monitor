@@ -382,6 +382,15 @@ async function fetchAllSince(entity, fields, blockGt) {
   return rows;
 }
 
+function maxBlock(rows) {
+  let max = 0;
+  for (const row of rows) {
+    const block = parseInt(row.block_number, 10);
+    if (block > max) max = block;
+  }
+  return max;
+}
+
 async function syncTable(db, tableName, entity, fields, makeStmt) {
   const cur   = await db.prepare('SELECT last_block FROM sync_log WHERE table_name=?').bind(tableName).first();
   const since = cur?.last_block ?? 0;
@@ -393,7 +402,7 @@ async function syncTable(db, tableName, entity, fields, makeStmt) {
   for (let i = 0; i < stmts.length; i += 100) {
     await db.batch(stmts.slice(i, i + 100));
   }
-  const lastBlock = Math.max(...rows.map(r => parseInt(r.block_number)));
+  const lastBlock = maxBlock(rows);
   await db.prepare('UPDATE sync_log SET last_block=?, last_synced=? WHERE table_name=?')
     .bind(lastBlock, new Date().toISOString(), tableName).run();
   return rows.length;
