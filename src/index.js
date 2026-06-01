@@ -183,7 +183,7 @@ async function fetchChainSnapshot(db) {
 }
 
 async function fetchDelphiStats(db) {
-  const [r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15, r16, r17, r18, r19, r20, r21, r22, r23, r24, r25, r26, r27, r28, r29, r30, r31, r32, r33, r34, r35, r36, r37, r38, r39, r40, r41, r42, r43, r44, r45] = await db.batch([
+  const [r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15, r16, r17, r18, r19, r20, r21, r22, r23, r24, r25, r26, r27, r28, r29, r30, r31, r32, r33, r34, r35, r36, r37, r38, r39, r40, r41, r42, r43, r44, r45, r46, r47] = await db.batch([
     db.prepare('SELECT COALESCE(SUM(tokens_in),0)  AS v FROM buys'),
     db.prepare('SELECT COALESCE(SUM(tokens_out),0) AS v FROM sells'),
     db.prepare('SELECT COALESCE(SUM(tokens_out),0) AS v FROM redemptions'),
@@ -243,6 +243,8 @@ async function fetchDelphiStats(db) {
     db.prepare(`SELECT CAST(timestamp_ / 43200 AS INTEGER) AS hr, SUM(vol) AS v FROM (SELECT timestamp_, tokens_in AS vol FROM buys WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 604800 UNION ALL SELECT timestamp_, tokens_out AS vol FROM sells WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 604800) GROUP BY hr ORDER BY hr ASC`),
     db.prepare(`SELECT CAST(timestamp_ / 86400 AS INTEGER) AS day, COUNT(*) AS n FROM (SELECT timestamp_ FROM buys UNION ALL SELECT timestamp_ FROM sells) GROUP BY day ORDER BY day ASC`),
     db.prepare(`SELECT tokens_in AS amount FROM buys WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 604800 UNION ALL SELECT tokens_out AS amount FROM sells WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 604800`),
+    db.prepare(`SELECT COUNT(*) AS v FROM (SELECT id FROM buys WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 604800 UNION ALL SELECT id FROM sells WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 604800)`),
+    db.prepare(`SELECT COUNT(*) AS v FROM (SELECT id FROM buys WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 1209600 AND timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 604800 UNION ALL SELECT id FROM sells WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 1209600 AND timestamp_ <= CAST(strftime('%s','now') AS INTEGER) - 604800)`),
   ]);
   const v = (res) => res.results?.[0]?.v ?? 0;
   return {
@@ -273,8 +275,8 @@ async function fetchDelphiStats(db) {
     trades_per_hour:     r30.results || [],
     vol_7d:              v(r31) + v(r32),
     vol_prev7d:          v(r33) + v(r34),
-    trades_7d:           v(r35),
-    trades_prev7d:       v(r36),
+    trades_7d:           v(r46),
+    trades_prev7d:       v(r47),
     vol_7d_ago:          v(r35) + v(r36),
     trades_7d_ago:       v(r37),
     traders_7d_ago:      v(r38),
@@ -372,7 +374,7 @@ async function fetchAllSince(entity, fields, blockGt) {
   let lastId = '';
   while (true) {
     const idFilter = lastId ? `, id_gt: "${lastId}"` : '';
-    const q = `{ ${entity}(first: 100, orderBy: block_number, orderDirection: asc,
+    const q = `{ ${entity}(first: 100, orderBy: id, orderDirection: asc,
       where: { block_number_gt: "${blockGt}"${idFilter} }) { ${fields} } }`;
     const batch = (await gql(q))[entity] || [];
     rows.push(...batch);
@@ -380,6 +382,15 @@ async function fetchAllSince(entity, fields, blockGt) {
     lastId = batch[batch.length - 1].id;
   }
   return rows;
+}
+
+function maxBlock(rows, since = 0) {
+  let max = since;
+  for (const row of rows) {
+    const block = parseInt(row.block_number, 10);
+    if (!Number.isNaN(block) && block > max) max = block;
+  }
+  return max;
 }
 
 async function syncTable(db, tableName, entity, fields, makeStmt) {
@@ -393,7 +404,7 @@ async function syncTable(db, tableName, entity, fields, makeStmt) {
   for (let i = 0; i < stmts.length; i += 100) {
     await db.batch(stmts.slice(i, i + 100));
   }
-  const lastBlock = parseInt(rows[rows.length - 1].block_number);
+  const lastBlock = maxBlock(rows, since);
   await db.prepare('UPDATE sync_log SET last_block=?, last_synced=? WHERE table_name=?')
     .bind(lastBlock, new Date().toISOString(), tableName).run();
   return rows.length;
