@@ -110,6 +110,14 @@
   <div class="panel" id="p-count-7d">    <div class="panel-title">Trade Count (7 Days)</div>  <span class="dim">loading…</span></div>
 </div>
 <div class="grid2">
+  <div class="panel" id="p-users-alltime"><div class="panel-title">Total Users (All Time)</div><span class="dim">loading…</span></div>
+  <div class="panel" id="p-users-7d">    <div class="panel-title">Total Users (7 Days)</div>  <span class="dim">loading…</span></div>
+</div>
+<div class="grid2">
+  <div class="panel" id="p-new-users-alltime"><div class="panel-title">Total New Users (All Time)</div><span class="dim">loading…</span></div>
+  <div class="panel" id="p-new-users-7d">    <div class="panel-title">Total New Users (7 Days)</div>  <span class="dim">loading…</span></div>
+</div>
+<div class="grid2">
   <div class="panel" id="p-top-traders"><div class="panel-title">Top Traders</div><span class="dim">loading…</span></div>
   <div class="panel" id="p-creators"><div class="panel-title">Market Creators</div><span class="dim">loading…</span></div>
 </div>
@@ -783,6 +791,206 @@ function renderCount7d(d) {
   </svg>`;
 }
 
+// ── Total Users All Time (daily bars) ────────────────────────────────────
+function renderUsersAllTime(d) {
+  const raw = d.delphi?.users_daily || [];
+  if (!raw.length) return '<span class="dim">No data</span>';
+
+  const map = new Map(raw.map(r => [r.day, r.n]));
+  const minDay = raw[0].day;
+  const nowDay = Math.floor(Date.now() / 86400000);
+  const allDays = [];
+  for (let dy = minDay; dy <= nowDay; dy++) allDays.push(dy);
+  const counts = allDays.map(dy => map.get(dy) || 0);
+  const maxCount = Math.max(...counts, 1);
+
+  const SvgW = 880, H = 300;
+  const pL = 38, pR = 8, pT = 8, pB = 28;
+  const pw = SvgW - pL - pR, ph = H - pT - pB;
+  const barW = pw / allDays.length;
+
+  const bars = counts.map((c, i) => {
+    const bh = c / maxCount * ph;
+    const x = (pL + i * barW + 0.5).toFixed(1);
+    const y = (pT + ph - bh).toFixed(1);
+    const fill = i === counts.length - 1 ? T : G;
+    return `<rect x="${x}" y="${y}" width="${Math.max(barW - 1, 0.5).toFixed(1)}" height="${bh.toFixed(1)}" fill="${fill}"/>`;
+  }).join('');
+
+  const grid = [0.5, 1].map(f => {
+    const y = (pT + ph - f * ph).toFixed(1);
+    return `<line x1="${pL}" y1="${y}" x2="${pL + pw}" y2="${y}" stroke="#ffffff" stroke-opacity="0.15" stroke-dasharray="3,3"/>
+            <text x="${pL - 3}" y="${(+y + 4).toFixed(1)}" fill="#ffffff" font-size="14.5" text-anchor="end" font-family="Menlo, Monaco, Consolas, Courier New, monospace">${Math.round(f * maxCount)}</text>`;
+  }).join('');
+
+  const labelCount = Math.min(6, allDays.length - 1);
+  const xLabels = Array.from({length: labelCount + 1}, (_, i) => {
+    const idx = Math.round(i / labelCount * (allDays.length - 1));
+    const x = (pL + (idx + 0.5) * barW).toFixed(1);
+    const dt = new Date(allDays[idx] * 86400000);
+    const label = (dt.getUTCMonth() + 1) + '/' + dt.getUTCDate();
+    const anchor = i === labelCount ? 'end' : i === 0 ? 'start' : 'middle';
+    return `<text x="${x}" y="${H - 4}" fill="#ffffff" font-size="14" text-anchor="${anchor}" font-family="Menlo, Monaco, Consolas, Courier New, monospace">${label}</text>`;
+  }).join('');
+
+  const axes = `<line x1="${pL}" y1="${pT}" x2="${pL}" y2="${pT + ph}" stroke="#ffffff" stroke-width="1"/>
+                <line x1="${pL}" y1="${pT + ph}" x2="${pL + pw}" y2="${pT + ph}" stroke="#ffffff" stroke-width="1"/>`;
+
+  return `<svg width="100%" viewBox="0 0 ${SvgW} ${H}" style="display:block">
+    ${grid}${bars}${axes}${xLabels}
+  </svg>`;
+}
+
+// ── Total Users 7 Days (12h bars) ────────────────────────────────────────
+function renderUsers7d(d) {
+  const raw = d.delphi?.users_6h || [];
+  if (!raw.length) return '<span class="dim">No data</span>';
+
+  const BUCKETS = 14, BUCKET_S = 43200;
+  const nowBucket = Math.floor(Date.now() / (BUCKET_S * 1000));
+  const map = new Map(raw.map(r => [r.hr, r.n]));
+  const buckets = Array.from({length: BUCKETS}, (_, i) => nowBucket - (BUCKETS - 1) + i);
+  const counts = buckets.map(b => map.get(b) || 0);
+  const maxCount = Math.max(...counts, 1);
+
+  const SvgW = 880, H = 300;
+  const pL = 38, pR = 8, pT = 8, pB = 28;
+  const pw = SvgW - pL - pR, ph = H - pT - pB;
+  const barW = pw / BUCKETS;
+
+  const bars = counts.map((c, i) => {
+    const bh = c / maxCount * ph;
+    const x = (pL + i * barW + 0.5).toFixed(1);
+    const y = (pT + ph - bh).toFixed(1);
+    const fill = i === counts.length - 1 ? T : G;
+    return `<rect x="${x}" y="${y}" width="${(barW - 1).toFixed(1)}" height="${bh.toFixed(1)}" fill="${fill}"/>`;
+  }).join('');
+
+  const grid = [0.5, 1].map(f => {
+    const y = (pT + ph - f * ph).toFixed(1);
+    return `<line x1="${pL}" y1="${y}" x2="${pL + pw}" y2="${y}" stroke="#ffffff" stroke-opacity="0.15" stroke-dasharray="3,3"/>
+            <text x="${pL - 3}" y="${(+y + 4).toFixed(1)}" fill="#ffffff" font-size="14.5" text-anchor="end" font-family="Menlo, Monaco, Consolas, Courier New, monospace">${Math.round(f * maxCount)}</text>`;
+  }).join('');
+
+  const xLabels = [0, 2, 4, 6, 8, 10, 12, BUCKETS].map(bi => {
+    const x = (pL + bi * barW).toFixed(1);
+    const daysAgo = Math.round((BUCKETS - bi) * 12 / 24);
+    const label = bi === BUCKETS ? 'now' : daysAgo + 'd ago';
+    const anchor = bi === BUCKETS ? 'end' : bi === 0 ? 'start' : 'middle';
+    return `<text x="${x}" y="${H - 4}" fill="#ffffff" font-size="14" text-anchor="${anchor}" font-family="Menlo, Monaco, Consolas, Courier New, monospace">${label}</text>`;
+  }).join('');
+
+  const axes = `<line x1="${pL}" y1="${pT}" x2="${pL}" y2="${pT + ph}" stroke="#ffffff" stroke-width="1"/>
+                <line x1="${pL}" y1="${pT + ph}" x2="${pL + pw}" y2="${pT + ph}" stroke="#ffffff" stroke-width="1"/>`;
+
+  return `<svg width="100%" viewBox="0 0 ${SvgW} ${H}" style="display:block">
+    ${grid}${bars}${axes}${xLabels}
+  </svg>`;
+}
+
+// ── Total New Users All Time (daily bars, log y-axis) ───────────────────
+function renderNewUsersAllTime(d) {
+  const raw = d.delphi?.new_users_daily || [];
+  if (!raw.length) return '<span class="dim">No data</span>';
+
+  const map = new Map(raw.map(r => [r.day, r.n]));
+  const minDay = raw[0].day;
+  const nowDay = Math.floor(Date.now() / 86400000);
+  const allDays = [];
+  for (let dy = minDay; dy <= nowDay; dy++) allDays.push(dy);
+  const counts = allDays.map(dy => map.get(dy) || 0);
+  const maxCount = Math.max(...counts, 1);
+
+  const SvgW = 880, H = 300;
+  const pL = 38, pR = 8, pT = 8, pB = 28;
+  const pw = SvgW - pL - pR, ph = H - pT - pB;
+  const barW = pw / allDays.length;
+
+  const logMax = Math.log10(maxCount + 1);
+  const scale  = c => Math.log10(c + 1) / logMax;
+
+  const bars = counts.map((c, i) => {
+    const bh = scale(c) * ph;
+    const x = (pL + i * barW + 0.5).toFixed(1);
+    const y = (pT + ph - bh).toFixed(1);
+    const fill = i === counts.length - 1 ? T : G;
+    return `<rect x="${x}" y="${y}" width="${Math.max(barW - 1, 0.5).toFixed(1)}" height="${bh.toFixed(1)}" fill="${fill}"/>`;
+  }).join('');
+
+  const ticks = [];
+  for (let k = 0; Math.pow(10, k) <= maxCount; k++) ticks.push(Math.pow(10, k));
+  const grid = ticks.map(t => {
+    const y = (pT + ph - scale(t) * ph).toFixed(1);
+    return `<line x1="${pL}" y1="${y}" x2="${pL + pw}" y2="${y}" stroke="#ffffff" stroke-opacity="0.15" stroke-dasharray="3,3"/>
+            <text x="${pL - 3}" y="${(+y + 4).toFixed(1)}" fill="#ffffff" font-size="14.5" text-anchor="end" font-family="Menlo, Monaco, Consolas, Courier New, monospace">${t}</text>`;
+  }).join('');
+
+  const labelCount = Math.min(6, allDays.length - 1);
+  const xLabels = Array.from({length: labelCount + 1}, (_, i) => {
+    const idx = Math.round(i / labelCount * (allDays.length - 1));
+    const x = (pL + (idx + 0.5) * barW).toFixed(1);
+    const dt = new Date(allDays[idx] * 86400000);
+    const label = (dt.getUTCMonth() + 1) + '/' + dt.getUTCDate();
+    const anchor = i === labelCount ? 'end' : i === 0 ? 'start' : 'middle';
+    return `<text x="${x}" y="${H - 4}" fill="#ffffff" font-size="14" text-anchor="${anchor}" font-family="Menlo, Monaco, Consolas, Courier New, monospace">${label}</text>`;
+  }).join('');
+
+  const axes = `<line x1="${pL}" y1="${pT}" x2="${pL}" y2="${pT + ph}" stroke="#ffffff" stroke-width="1"/>
+                <line x1="${pL}" y1="${pT + ph}" x2="${pL + pw}" y2="${pT + ph}" stroke="#ffffff" stroke-width="1"/>`;
+
+  return `<svg width="100%" viewBox="0 0 ${SvgW} ${H}" style="display:block">
+    ${grid}${bars}${axes}${xLabels}
+  </svg>
+  <div style="text-align:center;font-size:14px;color:${T};margin-top:4px">log scale</div>`;
+}
+
+// ── Total New Users 7 Days (12h bars) ────────────────────────────────────
+function renderNewUsers7d(d) {
+  const raw = d.delphi?.new_users_6h || [];
+  if (!raw.length) return '<span class="dim">No data</span>';
+
+  const BUCKETS = 14, BUCKET_S = 43200;
+  const nowBucket = Math.floor(Date.now() / (BUCKET_S * 1000));
+  const map = new Map(raw.map(r => [r.hr, r.n]));
+  const buckets = Array.from({length: BUCKETS}, (_, i) => nowBucket - (BUCKETS - 1) + i);
+  const counts = buckets.map(b => map.get(b) || 0);
+  const maxCount = Math.max(...counts, 1);
+
+  const SvgW = 880, H = 300;
+  const pL = 38, pR = 8, pT = 8, pB = 28;
+  const pw = SvgW - pL - pR, ph = H - pT - pB;
+  const barW = pw / BUCKETS;
+
+  const bars = counts.map((c, i) => {
+    const bh = c / maxCount * ph;
+    const x = (pL + i * barW + 0.5).toFixed(1);
+    const y = (pT + ph - bh).toFixed(1);
+    const fill = i === counts.length - 1 ? T : G;
+    return `<rect x="${x}" y="${y}" width="${(barW - 1).toFixed(1)}" height="${bh.toFixed(1)}" fill="${fill}"/>`;
+  }).join('');
+
+  const grid = [0.5, 1].map(f => {
+    const y = (pT + ph - f * ph).toFixed(1);
+    return `<line x1="${pL}" y1="${y}" x2="${pL + pw}" y2="${y}" stroke="#ffffff" stroke-opacity="0.15" stroke-dasharray="3,3"/>
+            <text x="${pL - 3}" y="${(+y + 4).toFixed(1)}" fill="#ffffff" font-size="14.5" text-anchor="end" font-family="Menlo, Monaco, Consolas, Courier New, monospace">${Math.round(f * maxCount)}</text>`;
+  }).join('');
+
+  const xLabels = [0, 2, 4, 6, 8, 10, 12, BUCKETS].map(bi => {
+    const x = (pL + bi * barW).toFixed(1);
+    const daysAgo = Math.round((BUCKETS - bi) * 12 / 24);
+    const label = bi === BUCKETS ? 'now' : daysAgo + 'd ago';
+    const anchor = bi === BUCKETS ? 'end' : bi === 0 ? 'start' : 'middle';
+    return `<text x="${x}" y="${H - 4}" fill="#ffffff" font-size="14" text-anchor="${anchor}" font-family="Menlo, Monaco, Consolas, Courier New, monospace">${label}</text>`;
+  }).join('');
+
+  const axes = `<line x1="${pL}" y1="${pT}" x2="${pL}" y2="${pT + ph}" stroke="#ffffff" stroke-width="1"/>
+                <line x1="${pL}" y1="${pT + ph}" x2="${pL + pw}" y2="${pT + ph}" stroke="#ffffff" stroke-width="1"/>`;
+
+  return `<svg width="100%" viewBox="0 0 ${SvgW} ${H}" style="display:block">
+    ${grid}${bars}${axes}${xLabels}
+  </svg>`;
+}
+
 // ── refresh loop ──────────────────────────────────────────────────────────
 async function refresh() {
   try {
@@ -808,6 +1016,10 @@ async function refresh() {
     setPanel('p-vol-7d',          renderVol7d(d));
     setPanel('p-count-alltime',   renderCountAllTime(d));
     setPanel('p-count-7d',        renderCount7d(d));
+    setPanel('p-users-alltime',     renderUsersAllTime(d));
+    setPanel('p-users-7d',          renderUsers7d(d));
+    setPanel('p-new-users-alltime', renderNewUsersAllTime(d));
+    setPanel('p-new-users-7d',      renderNewUsers7d(d));
     const creators = d.delphi?.creator_stats || [];
     d.mcSet = new Set(creators.map(c => c.address));
     setPanel('p-top-traders',  renderTopTraders(d, creators.length));

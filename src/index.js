@@ -183,7 +183,7 @@ async function fetchChainSnapshot(db) {
 }
 
 async function fetchDelphiStats(db) {
-  const [r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15, r16, r17, r18, r19, r20, r21, r22, r23, r24, r25, r26, r27, r28, r29, r30, r31, r32, r33, r34, r35, r36, r37, r38, r39, r40, r41, r42, r43, r44, r45] = await db.batch([
+  const [r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15, r16, r17, r18, r19, r20, r21, r22, r23, r24, r25, r26, r27, r28, r29, r30, r31, r32, r33, r34, r35, r36, r37, r38, r39, r40, r41, r42, r43, r44, r45, r46, r47, r48, r49] = await db.batch([
     db.prepare('SELECT COALESCE(SUM(tokens_in),0)  AS v FROM buys'),
     db.prepare('SELECT COALESCE(SUM(tokens_out),0) AS v FROM sells'),
     db.prepare('SELECT COALESCE(SUM(tokens_out),0) AS v FROM redemptions'),
@@ -243,6 +243,10 @@ async function fetchDelphiStats(db) {
     db.prepare(`SELECT CAST(timestamp_ / 43200 AS INTEGER) AS hr, SUM(vol) AS v FROM (SELECT timestamp_, tokens_in AS vol FROM buys WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 604800 UNION ALL SELECT timestamp_, tokens_out AS vol FROM sells WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 604800) GROUP BY hr ORDER BY hr ASC`),
     db.prepare(`SELECT CAST(timestamp_ / 86400 AS INTEGER) AS day, COUNT(*) AS n FROM (SELECT timestamp_ FROM buys UNION ALL SELECT timestamp_ FROM sells) GROUP BY day ORDER BY day ASC`),
     db.prepare(`SELECT tokens_in AS amount FROM buys WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 604800 UNION ALL SELECT tokens_out AS amount FROM sells WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 604800`),
+    db.prepare(`SELECT CAST(timestamp_ / 86400 AS INTEGER) AS day, COUNT(DISTINCT addr) AS n FROM (SELECT timestamp_, buyer AS addr FROM buys UNION ALL SELECT timestamp_, seller AS addr FROM sells) GROUP BY day ORDER BY day ASC`),
+    db.prepare(`SELECT CAST(timestamp_ / 43200 AS INTEGER) AS hr, COUNT(DISTINCT addr) AS n FROM (SELECT timestamp_, buyer AS addr FROM buys WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 604800 UNION ALL SELECT timestamp_, seller AS addr FROM sells WHERE timestamp_ > CAST(strftime('%s','now') AS INTEGER) - 604800) GROUP BY hr ORDER BY hr ASC`),
+    db.prepare(`WITH first_seen AS (SELECT addr, MIN(ts) AS first_ts FROM (SELECT buyer AS addr, timestamp_ AS ts FROM buys UNION ALL SELECT seller AS addr, timestamp_ AS ts FROM sells) GROUP BY addr) SELECT CAST(first_ts / 86400 AS INTEGER) AS day, COUNT(*) AS n FROM first_seen GROUP BY day ORDER BY day ASC`),
+    db.prepare(`WITH first_seen AS (SELECT addr, MIN(ts) AS first_ts FROM (SELECT buyer AS addr, timestamp_ AS ts FROM buys UNION ALL SELECT seller AS addr, timestamp_ AS ts FROM sells) GROUP BY addr) SELECT CAST(first_ts / 43200 AS INTEGER) AS hr, COUNT(*) AS n FROM first_seen WHERE first_ts > CAST(strftime('%s','now') AS INTEGER) - 604800 GROUP BY hr ORDER BY hr ASC`),
   ]);
   const v = (res) => res.results?.[0]?.v ?? 0;
   return {
@@ -290,6 +294,10 @@ async function fetchDelphiStats(db) {
     vol_6h:              r43.results || [],
     count_daily:         r44.results || [],
     trade_amounts_7d:    (r45.results || []).map(r => r.amount / 1e6),
+    users_daily:         r46.results || [],
+    users_6h:            r47.results || [],
+    new_users_daily:     r48.results || [],
+    new_users_6h:        r49.results || [],
     creator_stats:       await fetchCreatorStats(db),
   };
 }
