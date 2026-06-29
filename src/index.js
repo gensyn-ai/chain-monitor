@@ -3,7 +3,7 @@
 
 const BLOCKS_API    = 'https://gensyn-mainnet.explorer.alchemy.com/api/v2/main-page/blocks';
 const STATS_API     = 'https://gensyn-mainnet.explorer.alchemy.com/api/v2/stats';
-const GOLDSKY_URL = 'https://api.goldsky.com/api/public/project_cmnoqdag1obop01z3efnu8ssq/subgraphs/delphi-mainnet/1.0.0/gn';
+const GOLDSKY_URL = 'https://api.goldsky.com/api/public/project_cmnoqdag1obop01z3efnu8ssq/subgraphs/delphi-mainnet/1.0.1/gn';
 const PUBLIC_RPC  = 'https://gensyn-mainnet.g.alchemy.com/public';
 
 const USDC_E       = '0x5b32c997211621d55a89Cc5abAF1cC21F3A6ddF5';
