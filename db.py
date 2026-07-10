@@ -108,7 +108,7 @@ def fetch_all_since(entity: str, fields: str, block_gt: int) -> list:
         q = f"""{{
             {entity}(
                 first: {PAGE},
-                orderBy: block_number,
+                orderBy: id,
                 orderDirection: asc,
                 where: {{ block_number_gt: "{block_gt}"{id_filter} }}
             ) {{ {fields} }}
@@ -119,6 +119,10 @@ def fetch_all_since(entity: str, fields: str, block_gt: int) -> list:
             break
         last_id = batch[-1]["id"]
     return results
+
+
+def max_block(rows: list) -> int:
+    return max(int(r["block_number"]) for r in rows)
 
 
 def sync_buys(con: sqlite3.Connection) -> int:
@@ -134,7 +138,7 @@ def sync_buys(con: sqlite3.Connection) -> int:
           r["marketProxy"], r["buyer"], int(r["outcomeIdx"]),
           int(r["tokensIn"]), r["sharesOut"]) for r in rows]
     )
-    set_cursor(con, "buys", int(rows[-1]["block_number"]))
+    set_cursor(con, "buys", max_block(rows))
     return len(rows)
 
 
@@ -151,7 +155,7 @@ def sync_sells(con: sqlite3.Connection) -> int:
           r["marketProxy"], r["seller"], int(r["outcomeIdx"]),
           r["sharesIn"], int(r["tokensOut"])) for r in rows]
     )
-    set_cursor(con, "sells", int(rows[-1]["block_number"]))
+    set_cursor(con, "sells", max_block(rows))
     return len(rows)
 
 
@@ -167,7 +171,7 @@ def sync_redemptions(con: sqlite3.Connection) -> int:
         [(r["id"], int(r["block_number"]), int(r["timestamp_"]), r["transactionHash_"],
           r["marketProxy"], r["redeemer"], r["sharesIn"], int(r["tokensOut"])) for r in rows]
     )
-    set_cursor(con, "redemptions", int(rows[-1]["block_number"]))
+    set_cursor(con, "redemptions", max_block(rows))
     return len(rows)
 
 
@@ -184,7 +188,7 @@ def sync_liquidations(con: sqlite3.Connection) -> int:
           r["marketProxy"], r["liquidator"], r["outcomeIndices"],
           r["sharesIn"], int(r["totalTokensOut"])) for r in rows]
     )
-    set_cursor(con, "liquidations", int(rows[-1]["block_number"]))
+    set_cursor(con, "liquidations", max_block(rows))
     return len(rows)
 
 
@@ -201,7 +205,7 @@ def sync_resolutions(con: sqlite3.Connection) -> int:
           r["marketProxy"], int(r["winningOutcomeIdx"]), int(r["marketCreatorReward"]),
           int(r["refund"]), int(r["marketCreatorTradingFeesCut"])) for r in rows]
     )
-    set_cursor(con, "resolutions", int(rows[-1]["block_number"]))
+    set_cursor(con, "resolutions", max_block(rows))
     return len(rows)
 
 
