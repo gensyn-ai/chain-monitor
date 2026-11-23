@@ -14,9 +14,12 @@ from rich.text import Text
 from rich.panel import Panel
 from rich import box
 
-EXPLORER   = "https://gensyn-mainnet.explorer.alchemy.com"
-BLOCKS_API = f"{EXPLORER}/api/v2/main-page/blocks"
-STATS_API  = f"{EXPLORER}/api/v2/stats"
+EXPLORER   = "https://explorer-gensyn-mainnet.t.conduit.xyz"
+# The Conduit explorer has no Blockscout API yet, so data still comes from the
+# old explorer until it is replaced (it goes away when we leave Alchemy).
+EXPLORER_API = "https://gensyn-mainnet.explorer.alchemy.com"
+BLOCKS_API = f"{EXPLORER_API}/api/v2/main-page/blocks"
+STATS_API  = f"{EXPLORER_API}/api/v2/stats"
 RPC_URL    = os.environ.get("GENSYN_RPC_URL",  "https://gensyn-mainnet.g.alchemy.com/public")
 L1_RPC_URL = os.environ.get("L1_RPC_URL",       "")  # set to your Ethereum mainnet RPC
 USDC_E       = "0x5b32c997211621d55a89Cc5abAF1cC21F3A6ddF5"
@@ -516,7 +519,7 @@ def build():
     foot.add_column(justify="right")
     # left side: explorer URL is a real hyperlink; the rest is plain descriptor text
     footer_left = Text()
-    footer_left.append_text(linkify("gensyn-mainnet.explorer.alchemy.com", EXPLORER))
+    footer_left.append_text(linkify("explorer-gensyn-mainnet.t.conduit.xyz", EXPLORER))
     footer_left.append("  ·  Goldsky/delphi-mainnet", style=DIM)
     foot.add_row(footer_left,
                  Text(online, style=f"bold {G}" if not error else f"bold {R}"))
