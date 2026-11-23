@@ -174,7 +174,7 @@ function fmtK(v) {
   if (v >= 1e3) return '$' + (v/1e3).toFixed(0) + 'k';
   return '$' + v.toFixed(0);
 }
-const EXPLORER = 'https://gensyn-mainnet.explorer.alchemy.com';
+const EXPLORER = 'https://explorer-gensyn-mainnet.t.conduit.xyz';
 function addrLink(addr, label) {
   const display = label || (addr.slice(0, 6) + '…' + addr.slice(-4));
   return `<a href="${EXPLORER}/address/${addr}" target="_blank" style="color:inherit;text-decoration:none" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${display}</a>`;
